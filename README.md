@@ -650,3 +650,23 @@ cd admin-menu-manager
 npx wrangler d1 execute thebar-preview --remote --command "SELECT COUNT(*) AS applied_migrations FROM d1_migrations;"
 npx wrangler d1 execute thebar-production --remote --command "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name;"
 ```
+
+## Cloudflare Pages 앱 설정
+
+관리자와 고객 메뉴판 Pages project는 같은 GitHub monorepo에서 각각 다른 root directory를 빌드한다.
+
+관리자 Pages project:
+
+- GitHub repository: `ryuhojin/thebars`
+- Root directory: `admin-menu-manager`
+- Build command: `npm run build`
+- Output directory: `dist`
+
+고객 메뉴판 Pages project:
+
+- GitHub repository: `ryuhojin/thebars`
+- Root directory: `customer-menu-board`
+- Build command: `npm run build`
+- Output directory: `dist`
+
+각 앱의 production build는 `tsconfig.build.json`을 사용한다. admin은 `src`, `server`, `functions`, `contracts`, `db`, `shared`, `vite.config.ts`만 typecheck하고, customer는 `src`, `contracts`, `shared`, `vite.config.ts`만 typecheck한다. `tests/e2e`, `vitest.config.ts`, `playwright.config.ts`는 로컬 검증용 `npm run typecheck`/`npm run test:e2e`에서만 검사한다. Cloudflare Pages가 각 앱 root directory에서만 `npm install`을 실행해도 production build가 `@playwright/test`에 의존하지 않도록 분리한 구조다.
