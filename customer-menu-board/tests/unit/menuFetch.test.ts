@@ -48,4 +48,16 @@ describe("customer public menu fetch", () => {
   it("rejects admin API JSON sources", () => {
     expect(() => buildPublicMenuJsonUrl("YmFyLWE3azJtOQ", "/api/menus")).toThrow(PublicMenuFetchError);
   });
+
+  it("keeps Cloudflare Pages JSON misses from falling through to the SPA shell", async () => {
+    const staticRoutingFiles = import.meta.glob("../../public/{_redirects,menus/404.html}", {
+      eager: true,
+      import: "default",
+      query: "?raw"
+    });
+    const matchedFiles = Object.keys(staticRoutingFiles);
+
+    expect(matchedFiles.some((path) => path.endsWith("/_redirects"))).toBe(false);
+    expect(matchedFiles.some((path) => path.endsWith("/menus/404.html"))).toBe(true);
+  });
 });
