@@ -1,0 +1,26 @@
+name = "admin-menu-manager"
+compatibility_date = "2026-06-23"
+pages_build_output_dir = "dist"
+
+# Copy this file to wrangler.toml for local Wrangler work.
+# Do not commit a real wrangler.toml with production database IDs.
+# Public repositories should configure D1 bindings in Cloudflare Pages settings
+# or keep local Wrangler IDs in an untracked wrangler.toml.
+
+[[d1_databases]]
+binding = "DB"
+database_name = "<preview-d1-name>"
+database_id = "<preview-d1-id>"
+migrations_dir = "db/migrations"
+
+[[env.preview.d1_databases]]
+binding = "DB"
+database_name = "<preview-d1-name>"
+database_id = "<preview-d1-id>"
+migrations_dir = "db/migrations"
+
+[[env.production.d1_databases]]
+binding = "DB"
+database_name = "<production-d1-name>"
+database_id = "<production-d1-id>"
+migrations_dir = "db/migrations"

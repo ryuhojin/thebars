@@ -12,10 +12,12 @@
 
 현재 원격 D1 binding:
 
-- preview: `thebar-preview` (`d852d5b8-a93e-4468-93f2-0083529bc68d`)
-- production: `thebar-production` (`407c68f2-a7c1-446d-8b9e-7b3be312bf4c`)
+- preview: `<preview-d1-name>` (`<preview-d1-id>`)
+- production: `<production-d1-name>` (`<production-d1-id>`)
 
 2026-06-24에 preview 원격 DB에는 20개 migration(`0000_d00_foundation.sql`~`0019_d23_rate_limits.sql`) 적용을 확인했다. production 원격 DB는 production 승인 전까지 업무 table 없이 보존한다.
+
+실제 D1 database name/id는 public repository에 기록하지 않는다. 로컬 Wrangler용 실제 `wrangler.toml`은 untracked 파일로만 보관하고, Cloudflare Pages의 D1 binding은 Pages project 설정에서 관리한다.
 
 ## Secret Checklist
 
