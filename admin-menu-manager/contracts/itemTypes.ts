@@ -70,6 +70,7 @@ export const itemTypeTemplateOptionSchema = z.object({
 });
 
 export const itemTypesResponseSchema = z.object({
+  isSystemAdmin: z.boolean(),
   templates: z.array(itemTypeTemplateOptionSchema),
   systemTypes: z.array(systemItemTypeSchema),
   accessibleBars: z.array(itemTypeBarOptionSchema)

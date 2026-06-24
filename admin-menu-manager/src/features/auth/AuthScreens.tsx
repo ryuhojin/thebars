@@ -275,9 +275,69 @@ function AuthFrame({
   return (
     <main className="auth-screen">
       <section className="auth-visual" aria-label="제품 설명">
-        <p className="eyebrow">THE BAR</p>
-        <h1>운영 보안을 먼저 세우고 메뉴와 주문을 연결합니다.</h1>
-        <p>비밀번호, 세션, CSRF, 강제 비밀번호 변경 흐름을 실제 운영 기준으로 검증합니다.</p>
+        <div className="auth-visual-copy">
+          <p className="eyebrow">THE BAR ADMIN</p>
+          <h1>바 운영을 위한 관리자 콘솔</h1>
+          <p>메뉴 공개, 주문 탭, 권한 관리를 한 곳에서 다루는 운영자 전용 공간입니다.</p>
+        </div>
+        <div className="auth-product-shot" aria-hidden="true">
+          <div className="auth-shot-topbar">
+            <strong>THE BAR</strong>
+            <span>현재 작업 바</span>
+          </div>
+          <div className="auth-shot-body">
+            <div className="auth-shot-sidebar">
+              <span className="active">대시보드</span>
+              <span>메뉴 관리</span>
+              <span>주문 탭</span>
+              <span>발행 이력</span>
+            </div>
+            <div className="auth-shot-content">
+              <div className="auth-shot-kpis">
+                <div>
+                  <span>오늘 주문</span>
+                  <strong>18</strong>
+                </div>
+                <div>
+                  <span>발행 상태</span>
+                  <strong>정상</strong>
+                </div>
+                <div>
+                  <span>품절 관리</span>
+                  <strong>3</strong>
+                </div>
+              </div>
+              <div className="auth-shot-table">
+                <div>
+                  <strong>맥캘란 12년</strong>
+                  <span className="auth-shot-chip">판매 중</span>
+                </div>
+                <div>
+                  <strong>하우스 하이볼</strong>
+                  <span className="auth-shot-chip warning">재고 확인</span>
+                </div>
+                <div>
+                  <strong>마감 정산</strong>
+                  <span className="auth-shot-chip neutral">대기</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <ul className="auth-visual-points" aria-hidden="true">
+          <li>
+            <strong>권한별 접근</strong>
+            <span>바별 역할과 메뉴를 분리</span>
+          </li>
+          <li>
+            <strong>주문 운영</strong>
+            <span>탭 생성부터 정산까지 추적</span>
+          </li>
+          <li>
+            <strong>고객 메뉴판</strong>
+            <span>공개 상태와 발행 이력 확인</span>
+          </li>
+        </ul>
       </section>
       <section className="auth-card" aria-labelledby="auth-title">
         <form onSubmit={onSubmit} noValidate>

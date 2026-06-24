@@ -138,7 +138,7 @@ export function ItemTypesPage({ navigate }: { navigate: Navigate }) {
     };
   }, [reloadKey]);
 
-  const isSystemAdmin = state.status === "ready" && state.data.accessibleBars.some((bar) => bar.role === "system-admin");
+  const isSystemAdmin = state.status === "ready" && state.data.isSystemAdmin;
   const accessibleBars = state.status === "ready" ? state.data.accessibleBars : [];
 
   useEffect(() => {

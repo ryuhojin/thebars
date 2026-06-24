@@ -35,6 +35,17 @@ for (const viewport of viewports) {
 
     await page.goto("/login");
     await expect(page.getByRole("button", { name: "관리자 복구" })).toHaveCount(0);
+    await expect(page.getByText("CSRF")).toHaveCount(0);
+    await expect(page.getByText(/운영 보안을 먼저/)).toHaveCount(0);
+    if (viewport.width >= 768) {
+      await expect(page.getByRole("heading", { name: "바 운영을 위한 관리자 콘솔" })).toBeVisible();
+      await expect(page.getByText("오늘 주문")).toBeVisible();
+      await expect(page.locator(".auth-visual")).toHaveCSS("background-image", "none");
+    }
+    await page.screenshot({
+      path: testInfo.outputPath(`auth-login-${viewport.label}.png`),
+      fullPage: true
+    });
     await page.getByLabel("아이디").fill("forced1");
     await page.setViewportSize({ width: 390, height: 844 });
     await expect(page).toHaveURL(/\/login$/);

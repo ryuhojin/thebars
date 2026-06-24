@@ -636,21 +636,23 @@ npm run verify:pilot
 
 ## Cloudflare D1 원격 환경
 
-현재 관리자 Pages 설정은 preview와 production D1을 분리한다. Public repository에는 실제 D1 database name/id를 기록하지 않는다.
+현재 관리자 Pages 운영 설정은 production-only D1을 기준으로 한다. Public repository에는 실제 D1 database name/id를 기록하지 않는다.
 
-- preview: `<preview-d1-name>` (`<preview-d1-id>`)
 - production: `<production-d1-name>` (`<production-d1-id>`)
 
-2026-06-24 기준 preview 원격 DB에는 `0000_d00_foundation.sql`부터 `0019_d23_rate_limits.sql`까지 20개 migration을 적용했다. production 원격 DB에는 아직 업무 table을 만들지 않았고, production migration은 export/checksum 기록과 사람 승인 후 별도 실행한다.
+Cloudflare Pages `thebars-admin` production Functions binding은 `DB` 이름으로 production D1에 연결한다. Preview D1은 필수가 아니며 현재 운영에서는 사용하지 않는다. 2026-06-24 기준 production 원격 DB에는 `0000_d00_foundation.sql`부터 `0019_d23_rate_limits.sql`까지 20개 migration 적용을 확인했다. 이후 production migration은 export/checksum 기록과 사람 승인 후 별도 실행한다.
 
 로컬 Wrangler 작업이 필요하면 `admin-menu-manager/wrangler.example.toml`을 `admin-menu-manager/wrangler.toml`로 복사한 뒤 실제 값을 채운다. 실제 `wrangler.toml`은 `.gitignore`에 포함되어 커밋하지 않는다. Cloudflare Pages 배포 환경의 D1 binding은 Pages project 설정에서 관리한다.
 
-확인 명령:
+향후 production migration 명령:
 
 ```bash
+npm run verify:migrations
 cd admin-menu-manager
-npx wrangler d1 execute <preview-d1-name> --remote --command "SELECT COUNT(*) AS applied_migrations FROM d1_migrations;"
-npx wrangler d1 execute <production-d1-name> --remote --command "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name;"
+mkdir -p "$HOME/thebar-d1-backups"
+npx wrangler d1 export <production-d1-name> --remote --output "$HOME/thebar-d1-backups/<production-d1-name>-before-$(date +%Y%m%d-%H%M%S).sql"
+npx wrangler d1 migrations apply <production-d1-name> --remote
+npx wrangler d1 execute <production-d1-name> --remote --command "SELECT COUNT(*) AS applied_migrations FROM d1_migrations;"
 ```
 
 ## Cloudflare Pages 앱 설정

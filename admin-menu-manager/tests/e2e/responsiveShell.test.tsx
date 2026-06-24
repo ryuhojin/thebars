@@ -1019,6 +1019,7 @@ function barMembersEnvelope() {
 function itemTypesEnvelope() {
   return {
     data: {
+      isSystemAdmin: true,
       templates: [
         { value: "general", label: "일반", fields: [] },
         { value: "wine", label: "와인", fields: ["생산자", "국가", "포도 품종"] },

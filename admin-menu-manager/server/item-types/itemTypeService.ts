@@ -58,6 +58,7 @@ export class ItemTypeService {
       this.readAccessibleOwnerBars(actor)
     ]);
     return itemTypesResponseSchema.parse({
+      isSystemAdmin: actor.isSystemAdmin,
       templates: itemTemplateOptions,
       systemTypes: systemTypes.map(toSystemItemTypeDto),
       accessibleBars

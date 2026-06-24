@@ -160,6 +160,7 @@ describe("D07 item types and grape variety API", () => {
     expect(list.status).toBe(200);
     expect(await readJsonObject(list)).toMatchObject({
       data: {
+        isSystemAdmin: true,
         templates: expect.arrayContaining([expect.objectContaining({ value: "wine" })]),
         systemTypes: expect.arrayContaining([expect.objectContaining({ id: "system-type-wine", defaultPriceLabels: ["글라스", "보틀"] })])
       }
@@ -222,6 +223,31 @@ describe("D07 item types and grape variety API", () => {
     expect(await readJsonObject(deactivateInUse)).toMatchObject({ error: { code: "ITEM_TYPE_IN_USE" } });
     expect(deleteInUse.status).toBe(409);
     expect(await readJsonObject(deleteInUse)).toMatchObject({ error: { code: "ITEM_TYPE_IN_USE" } });
+  });
+
+  it("keeps system-admin capability even when no bars exist", async () => {
+    const runtime = createRuntime();
+    await seedSystemAdmin(runtime);
+    const admin = await login(runtime, "admin1", "AdminPass!1");
+
+    const list = await runtime.app.request("/api/system/item-types", { headers: { cookie: admin.cookie } });
+    expect(list.status).toBe(200);
+    expect(await readJsonObject(list)).toMatchObject({
+      data: {
+        isSystemAdmin: true,
+        accessibleBars: []
+      }
+    });
+
+    const create = await postJson(
+      runtime.app,
+      "/api/system/item-types",
+      { name: "무알콜", template: "general", defaultPriceLabels: ["잔"] },
+      admin.cookie,
+      admin.csrf
+    );
+    expect(create.status).toBe(201);
+    expect(await readJsonObject(create)).toMatchObject({ data: { name: "무알콜" } });
   });
 
   it("isolates bar-specific types to system admins and bar owners", async () => {

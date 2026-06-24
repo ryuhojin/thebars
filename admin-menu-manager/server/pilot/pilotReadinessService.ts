@@ -53,7 +53,7 @@ export class PilotReadinessService {
 
     const sections: PilotReadinessSection[] = [
       section("environment", "환경·배포", [
-        check("d1-separation", "검증·운영 데이터베이스 분리", "manual_required", "운영", "검증 환경과 운영 환경의 데이터베이스 이름과 연결 정보를 운영 문서에서 분리 확인합니다.", "docs/operations/pilot-runbook.md#previewproduction-d1"),
+        check("d1-production", "운영 D1 바인딩과 migration 확인", "manual_required", "운영", "Cloudflare Pages production Functions binding `DB`와 production D1 migration 적용 상태를 운영 문서 기준으로 확인합니다.", "docs/operations/pilot-runbook.md#production-d1"),
         check("secret-checklist", "비밀값 점검표", "manual_required", "운영", "필수 비밀값은 이름만 점검하고 실제 값은 저장하지 않습니다.", "docs/operations/pilot-runbook.md#secret-checklist"),
         check("customer-pages", "고객 저장소·Pages 연결 절차", "manual_required", "운영", "고객 저장소와 Pages 연결 절차를 운영 문서에 고정했습니다.", "docs/operations/pilot-runbook.md#customer-repo-pages"),
         check("backup-rollback", "마이그레이션 백업·복구 절차", "manual_required", "운영", "데이터 내보내기, 사전 검증, 복구 절차를 운영 문서에 고정했습니다.", "docs/operations/pilot-runbook.md#migration-backup-rollback"),

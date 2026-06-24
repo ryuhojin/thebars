@@ -16,7 +16,7 @@ const requiredPhrases = new Map([
   [
     "docs/operations/pilot-runbook.md",
     [
-      "Preview/Production D1",
+      "Production D1",
       "Secret Checklist",
       "Customer Repo Pages",
       "Migration Backup Rollback",
@@ -42,19 +42,19 @@ const requiredPhrases = new Map([
   [
     "admin-menu-manager/server/pilot/pilotReadinessService.ts",
     [
-      "preview/production D1 분리",
-      "Secret checklist",
-      "private customer repo/Pages 연결 절차",
-      "GitHub/Cloudflare token rotation runbook",
-      "대표 와인/위스키/칵테일/푸드/시가 데이터",
-      "preparing→publish→republish→deactivate 시나리오",
-      "주문 open→add→adjust→settle 시나리오",
-      "사람의 production 배포 승인"
+      "운영 D1 바인딩과 migration 확인",
+      "비밀값 점검표",
+      "고객 저장소·Pages 연결 절차",
+      "GitHub·Cloudflare 토큰 교체 절차",
+      "대표 와인·위스키·칵테일·푸드·시가 데이터",
+      "준비·발행·재발행·비활성화 시나리오",
+      "주문 생성·추가·조정·정산 시나리오",
+      "사람의 운영 배포 승인"
     ]
   ],
   [
     "admin-menu-manager/src/features/audit/AuditPage.tsx",
-    ["파일럿 준비", "Production secret, remote push, production deploy는 수행하지 않습니다."]
+    ["파일럿 준비", "실제 운영 비밀값, 원격 반영, 운영 배포는 승인 전까지 실행하지 않습니다."]
   ]
 ]);
 

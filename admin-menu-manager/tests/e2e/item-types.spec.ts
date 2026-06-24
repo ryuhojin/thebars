@@ -68,6 +68,29 @@ async function expectTypeVisible(panel: Locator, name: string) {
 }
 
 for (const viewport of viewports) {
+  test(`D07 system admin can add a common item type without accessible bars at ${viewport.label}`, async ({ page }, testInfo) => {
+    await page.request.post("/__dev/reset-auth");
+    await page.setViewportSize({ width: viewport.width, height: viewport.height });
+    await login(page, "admin1", "AdminPass!1");
+
+    await page.goto("/system/item-types");
+    await expect(page).toHaveURL(/\/system\/item-types$/);
+    await expect(page.getByText("시스템 공통 유형 저장은 시스템 관리자만 가능합니다.")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "품목 유형 추가" })).toBeEnabled();
+
+    await page.getByRole("button", { name: "품목 유형 추가" }).click();
+    await expect(page.getByRole("heading", { name: "새 공통 유형" })).toBeVisible();
+    await expect(page.getByText("선택: 새 유형")).toBeVisible();
+    await page.getByLabel("유형 이름").fill(`논알콜 ${viewport.label}`);
+    await expect(page.getByLabel("유형 이름")).toHaveValue(`논알콜 ${viewport.label}`);
+
+    await expectNoHorizontalOverflow(page);
+    await page.screenshot({
+      path: testInfo.outputPath(`item-type-no-bar-create-${viewport.label}.png`),
+      fullPage: true
+    });
+  });
+
   test(`D07 item type create override approve at ${viewport.label}`, async ({ page }, testInfo) => {
     await page.request.post("/__dev/reset-auth");
     await page.setViewportSize({ width: viewport.width, height: viewport.height });
