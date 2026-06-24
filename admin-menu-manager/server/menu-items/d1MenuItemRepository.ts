@@ -43,6 +43,7 @@ type MenuItemPriceRow = {
   volume_text: string;
   amount_minor: number;
   display_order: number;
+  is_representative: number;
   created_by_user_id: string | null;
   updated_by_user_id: string | null;
   created_at: string;
@@ -201,8 +202,8 @@ export class D1MenuItemRepository implements MenuItemRepository {
             .prepare(
               `INSERT INTO menu_item_prices (
                 id, bar_id, menu_item_id, label, normalized_label, volume_text, amount_minor, display_order,
-                created_by_user_id, updated_by_user_id, created_at, updated_at
-              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+                is_representative, created_by_user_id, updated_by_user_id, created_at, updated_at
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
             )
             .bind(
               price.id,
@@ -213,6 +214,7 @@ export class D1MenuItemRepository implements MenuItemRepository {
               price.volumeText,
               price.amountMinor,
               price.displayOrder,
+              Boolean(price.isRepresentative) ? 1 : 0,
               updatedByUserId,
               updatedByUserId,
               now,
@@ -522,6 +524,7 @@ function toPriceRecord(row: MenuItemPriceRow): MenuItemPriceRecord {
     volumeText: row.volume_text,
     amountMinor: row.amount_minor,
     displayOrder: row.display_order,
+    isRepresentative: Boolean(row.is_representative),
     createdByUserId: row.created_by_user_id,
     updatedByUserId: row.updated_by_user_id,
     createdAt: row.created_at,

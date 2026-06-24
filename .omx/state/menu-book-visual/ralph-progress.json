@@ -1,0 +1,28 @@
+{
+  "scope": "menu-book-visual",
+  "status": "passed",
+  "updatedAt": "2026-06-24T17:12:00+09:00",
+  "target": "WF-22 customer menu book controls and representative price flow",
+  "verdict": {
+    "score": 94,
+    "decision": "pass",
+    "evidence": [
+      "Customer menu book controls render visible text after replacing overlay hit layers with background layers and explicit text spans.",
+      "Search and store-info controls keep wireframe min-height values while preserving 44px hit boxes.",
+      "Category pills keep wireframe visual height via inset background layer and preserve 44px button hit boxes.",
+      "Representative price defaults are enforced for whisky shot and wine bottle labels, with public JSON exposing only the representative price."
+    ],
+    "validatedBy": [
+      "npm run test:e2e --workspace customer-menu-board -- tests/e2e/customer-responsive.spec.ts",
+      "npm run test:e2e --workspace admin-menu-manager -- tests/e2e/menu-items.spec.ts tests/e2e/preview.spec.ts",
+      "npm run test:e2e"
+    ],
+    "screenshots": [
+      "/tmp/thebar-demo-book-390-final.png",
+      "customer-menu-board/test-results/customer-responsive-customer-menu-book-concept-at-compact-chromium/customer-menu-book-compact.png",
+      "customer-menu-board/test-results/customer-responsive-customer-menu-book-concept-at-medium-chromium/customer-menu-book-medium.png",
+      "customer-menu-board/test-results/customer-responsive-customer-menu-book-concept-at-wide-chromium/customer-menu-book-wide.png",
+      "customer-menu-board/test-results/customer-responsive-customer-menu-book-concept-at-ipad-pro-chromium/customer-menu-book-ipad-pro.png"
+    ]
+  }
+}

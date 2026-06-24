@@ -1,5 +1,9 @@
 import { z } from "zod";
-import { publicMenuSchema } from "./publicMenu";
+import { DEFAULT_PUBLIC_MENU_CONCEPT, publicMenuAvailableConceptSchema, publicMenuSchema } from "./publicMenu";
+
+export const publicMenuPreviewQuerySchema = z.object({
+  layoutConcept: publicMenuAvailableConceptSchema.default(DEFAULT_PUBLIC_MENU_CONCEPT)
+});
 
 export const previewScopeOptionSchema = z.object({
   id: z.string().min(1),
@@ -28,4 +32,5 @@ export const publicMenuPreviewResponseSchema = z.object({
 });
 
 export type PreviewScopeOption = z.infer<typeof previewScopeOptionSchema>;
+export type PublicMenuPreviewQuery = z.infer<typeof publicMenuPreviewQuerySchema>;
 export type PublicMenuPreviewResponse = z.infer<typeof publicMenuPreviewResponseSchema>;

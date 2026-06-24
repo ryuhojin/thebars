@@ -1,6 +1,7 @@
-import type { PublicMenu, PublicMenuBadge, PublicMenuCategory, PublicMenuField, PublicMenuItem } from "../../../shared/publicMenu";
+import type { PublicMenu, PublicMenuBadge, PublicMenuCategory, PublicMenuConcept, PublicMenuField, PublicMenuItem } from "../../../shared/publicMenu";
 import {
   calculatePublicMenuContentHash,
+  DEFAULT_PUBLIC_MENU_CONCEPT,
   flattenPublicCategorySections,
   publicMenuSchema,
   stablePublicMenuStringify,
@@ -42,9 +43,13 @@ export class PublicMenuPreviewService {
     this.now = options.now ?? (() => new Date());
   }
 
-  async readPreview(actor: AuthUserRecord, barId: string): Promise<PublicMenuPreviewResponse> {
+  async readPreview(
+    actor: AuthUserRecord,
+    barId: string,
+    layoutConcept: PublicMenuConcept = DEFAULT_PUBLIC_MENU_CONCEPT
+  ): Promise<PublicMenuPreviewResponse> {
     const settings = await this.requireBarAccess(actor, barId);
-    const menu = await this.buildPublicMenu(settings);
+    const menu = await this.buildPublicMenu(settings, layoutConcept);
     const sections = flattenPublicCategorySections(menu.categories);
     return publicMenuPreviewResponseSchema.parse({
       bar: {
@@ -82,7 +87,7 @@ export class PublicMenuPreviewService {
     return settings;
   }
 
-  private async buildPublicMenu(settings: BarSettingsRecord): Promise<PublicMenu> {
+  private async buildPublicMenu(settings: BarSettingsRecord, layoutConcept: PublicMenuConcept): Promise<PublicMenu> {
     const [categories, items, badgeCatalog] = await Promise.all([
       this.categoryRepository.listCategories(settings.bar.id),
       this.menuItemRepository.listMenuItems(settings.bar.id),
@@ -125,6 +130,7 @@ export class PublicMenuPreviewService {
     const draft: Omit<PublicMenu, "contentHash"> = {
       schemaVersion: 1,
       status: settings.bar.publicMenuStatus,
+      layout: { concept: layoutConcept },
       revision: 0,
       publishedAt: null,
       generatedAt: nowIso(this.now()),
@@ -256,7 +262,7 @@ function toPublicMenuItem(
     abv: item.abvBasisPoints === null ? null : item.abvBasisPoints / 100,
     prices: soldOut
       ? []
-      : prices
+      : representativePublicPrices(prices)
           .sort((left, right) => left.displayOrder - right.displayOrder || left.label.localeCompare(right.label, "ko"))
           .map((price) => ({
             label: price.label,
@@ -272,6 +278,11 @@ function toPublicMenuItem(
           .filter((badge): badge is PublicMenuBadge => badge !== undefined),
     fields: details ? detailsToPublicFields(details) : []
   };
+}
+
+function representativePublicPrices(prices: MenuItemPriceRecord[]): MenuItemPriceRecord[] {
+  const representative = prices.find((price) => price.isRepresentative);
+  return representative ? [representative] : prices.slice(0, 1);
 }
 
 function toPublicBadge(label: string, color: BadgeColorRecord): PublicMenuBadge {

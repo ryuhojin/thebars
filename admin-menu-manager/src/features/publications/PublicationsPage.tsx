@@ -7,6 +7,12 @@ import type {
   PublicationSummary,
   PublishCurrentMenuResponse
 } from "../../../contracts/publications";
+import {
+  DEFAULT_PUBLIC_MENU_CONCEPT,
+  publicMenuConceptOptions,
+  type PublicMenuAvailableConcept,
+  type PublicMenuConcept
+} from "../../../contracts/publicMenu";
 import { AdaptiveDialog } from "../../components/adaptive/AdaptiveDialog";
 import { AuthApiError } from "../auth/authApi";
 import { publishCurrentMenu, readPublications, republishSnapshot } from "./publicationsApi";
@@ -35,6 +41,7 @@ export function PublicationsPage({ barId, navigate }: { barId: string; navigate:
   const [publishState, setPublishState] = useState<PublishState>({ status: "idle" });
   const [reloadKey, setReloadKey] = useState(0);
   const [selectedPublicationId, setSelectedPublicationId] = useState("");
+  const [layoutConcept, setLayoutConcept] = useState<PublicMenuAvailableConcept>(DEFAULT_PUBLIC_MENU_CONCEPT);
   const [detailOpen, setDetailOpen] = useState(false);
 
   useEffect(() => {
@@ -78,7 +85,7 @@ export function PublicationsPage({ barId, navigate }: { barId: string; navigate:
 
   const confirmPublish = () => {
     setPublishState({ status: "publishing" });
-    publishCurrentMenu(barId, { confirmSavedOnly: true })
+    publishCurrentMenu(barId, { confirmSavedOnly: true, layoutConcept })
       .then((result) => {
         setPublishState({ status: "success", result });
         setReloadKey((value) => value + 1);
@@ -140,7 +147,7 @@ export function PublicationsPage({ barId, navigate }: { barId: string; navigate:
             <h2 id="publication-command-title">현재 저장본 발행</h2>
           </div>
           <div className="table-actions">
-            <button className="button secondary" type="button" onClick={() => navigate(`/bars/${barId}/preview`)}>
+            <button className="button secondary" type="button" onClick={() => navigate(`/bars/${barId}/preview?layoutConcept=${layoutConcept}`)}>
               미리보기
             </button>
             <button className="button primary" type="button" disabled={publishDisabled} onClick={startPublish}>
@@ -159,6 +166,12 @@ export function PublicationsPage({ barId, navigate }: { barId: string; navigate:
           {state.data.current.savedOnlyNotice}
         </div>
 
+        <ConceptSelector
+          disabled={!state.data.canPublish || mutationInFlight}
+          selected={layoutConcept}
+          onChange={setLayoutConcept}
+        />
+
         <div className={state.data.editDiff.hasUnpublishedChanges ? "form-summary warning" : "preview-callout"} role="status">
           {state.data.editDiff.hasUnpublishedChanges
             ? "최신 공개본과 현재 저장본이 다릅니다. 고객 메뉴판에 반영하려면 새 발행이 필요합니다."
@@ -168,6 +181,7 @@ export function PublicationsPage({ barId, navigate }: { barId: string; navigate:
         <div className="publication-target-grid">
           <Metric label="메뉴 데이터 경로" value={state.data.current.menuPath} />
           <Metric label="변경 확인 경로" value={state.data.current.triggerPath} />
+          <Metric label="고객 화면 컨셉" value={conceptLabel(layoutConcept)} />
           <Metric label="최근 성공 발행" value={state.data.latestSuccess ? `공개 ${state.data.latestSuccess.revision}` : "첫 발행 전"} />
           <Metric label="배포 확인" value={state.data.polling.active ? "30초마다 확인" : "대기 없음"} />
         </div>
@@ -177,7 +191,7 @@ export function PublicationsPage({ barId, navigate }: { barId: string; navigate:
             <div>
               <p className="eyebrow">확인</p>
               <h3 id="publication-confirm-title">저장된 메뉴판을 발행할까요?</h3>
-              <p>현재 화면에서 저장하지 않은 입력, 선택, 필터 상태는 고객 메뉴판에 포함되지 않습니다.</p>
+              <p>{conceptLabel(layoutConcept)}으로 고객 메뉴판을 표시합니다. 현재 화면에서 저장하지 않은 입력, 선택, 필터 상태는 포함되지 않습니다.</p>
             </div>
             <div className="dialog-actions">
               <button className="button secondary" type="button" onClick={() => setPublishState({ status: "idle" })}>
@@ -289,6 +303,39 @@ export function PublicationsPage({ barId, navigate }: { barId: string; navigate:
         {activePublication ? <PublicationDetailContent publication={activePublication} /> : null}
       </AdaptiveDialog>
     </div>
+  );
+}
+
+function ConceptSelector({
+  selected,
+  disabled,
+  onChange
+}: {
+  selected: PublicMenuAvailableConcept;
+  disabled: boolean;
+  onChange: (concept: PublicMenuAvailableConcept) => void;
+}) {
+  return (
+    <fieldset className="publication-concept-selector" aria-label="고객 메뉴판 컨셉 선택" disabled={disabled}>
+      <legend>고객 메뉴판 컨셉</legend>
+      <div>
+        {publicMenuConceptOptions.map((concept) => (
+          <label key={concept.id} data-selected={concept.id === selected}>
+            <input
+              checked={concept.id === selected}
+              name="layoutConcept"
+              onChange={() => onChange(concept.id)}
+              type="radio"
+              value={concept.id}
+            />
+            <span>
+              <strong>{concept.label}</strong>
+              <small>{concept.description}</small>
+            </span>
+          </label>
+        ))}
+      </div>
+    </fieldset>
   );
 }
 
@@ -538,6 +585,10 @@ function publicationOperationLabel(operation: PublicationOperation | null): stri
   if (operation === "restore_snapshot") return "마지막 공개본 복원";
   if (operation === "restore_preparing") return "준비 상태 복원";
   return "준비 중";
+}
+
+function conceptLabel(concept: PublicMenuConcept): string {
+  return publicMenuConceptOptions.find((option) => option.id === concept)?.label ?? "메뉴북형";
 }
 
 function deploymentStatusLabel(status?: CloudflareDeploymentStatus | null): string {

@@ -2,6 +2,12 @@ import { useEffect, useMemo, useState } from "react";
 import { PublicMenuRenderer } from "../../../../shared/PublicMenuRenderer";
 import { filterPublicMenu, flattenPublicCategorySections } from "../../../../shared/publicMenu";
 import type { PublicMenuPreviewResponse, PreviewScopeOption } from "../../../contracts/preview";
+import {
+  DEFAULT_PUBLIC_MENU_CONCEPT,
+  publicMenuConceptOptions,
+  type PublicMenuAvailableConcept,
+  type PublicMenuConcept
+} from "../../../contracts/publicMenu";
 import { AuthApiError } from "../auth/authApi";
 import { readPublicMenuPreview } from "./previewApi";
 
@@ -18,14 +24,15 @@ export function PreviewPage({ barId, navigate }: { barId: string; navigate: Navi
   const [state, setState] = useState<PreviewState>({ status: "loading" });
   const [query, setQuery] = useState("");
   const [scopeId, setScopeId] = useState("all");
+  const [layoutConcept, setLayoutConcept] = useState<PublicMenuAvailableConcept>(() => conceptFromLocation());
 
   useEffect(() => {
     let cancelled = false;
     setState({ status: "loading" });
-    readPublicMenuPreview(barId)
+    readPublicMenuPreview(barId, layoutConcept)
       .then((data) => {
         if (cancelled) return;
-        setScopeId((current) => (data.scopeOptions.some((option) => option.id === current) ? current : "all"));
+        setScopeId((current) => nextPreviewScopeId(data, current, layoutConcept));
         setState({ status: "ready", data });
       })
       .catch((error: unknown) => {
@@ -51,7 +58,7 @@ export function PreviewPage({ barId, navigate }: { barId: string; navigate: Navi
     return () => {
       cancelled = true;
     };
-  }, [barId]);
+  }, [barId, layoutConcept]);
 
   if (state.status === "loading") return <PreviewStatus title="미리보기 로딩 중" message="저장된 메뉴 데이터를 고객 화면 형식으로 변환하고 있습니다." />;
   if (state.status === "forbidden") return <PreviewStatus title="접근할 수 없습니다" message={state.message} tone="error" />;
@@ -73,6 +80,8 @@ export function PreviewPage({ barId, navigate }: { barId: string; navigate: Navi
       scopeId={scopeId}
       onQueryChange={setQuery}
       onScopeChange={setScopeId}
+      layoutConcept={layoutConcept}
+      onLayoutConceptChange={setLayoutConcept}
       navigate={navigate}
     />
   );
@@ -82,14 +91,18 @@ function PreviewReadyView({
   data,
   query,
   scopeId,
+  layoutConcept,
   onQueryChange,
+  onLayoutConceptChange,
   onScopeChange,
   navigate
 }: {
   data: PublicMenuPreviewResponse;
   query: string;
   scopeId: string;
+  layoutConcept: PublicMenuAvailableConcept;
   onQueryChange: (query: string) => void;
+  onLayoutConceptChange: (concept: PublicMenuAvailableConcept) => void;
   onScopeChange: (scopeId: string) => void;
   navigate: Navigate;
 }) {
@@ -152,6 +165,8 @@ function PreviewReadyView({
           </label>
         </div>
 
+        <PreviewConceptSelector selected={layoutConcept} onChange={onLayoutConceptChange} />
+
         <div className="preview-callout" role="status">
           저장되지 않은 입력값은 미리보기에 반영되지 않습니다. 내부 메모, 내부 ID, 사용자 정보는 공개 메뉴판 데이터에서 제외됩니다.
         </div>
@@ -167,6 +182,10 @@ function PreviewReadyView({
           <div>
             <span>표시 섹션</span>
             <strong>{sections.length}개</strong>
+          </div>
+          <div>
+            <span>고객 화면 컨셉</span>
+            <strong>{conceptLabel(data.menu.layout?.concept ?? DEFAULT_PUBLIC_MENU_CONCEPT)}</strong>
           </div>
         </div>
       </section>
@@ -191,6 +210,67 @@ function PreviewReadyView({
       </section>
     </div>
   );
+}
+
+function PreviewConceptSelector({
+  selected,
+  onChange
+}: {
+  selected: PublicMenuAvailableConcept;
+  onChange: (concept: PublicMenuAvailableConcept) => void;
+}) {
+  const changeConcept = (concept: PublicMenuAvailableConcept) => {
+    onChange(concept);
+    const url = new URL(window.location.href);
+    url.searchParams.set("layoutConcept", concept);
+    window.history.replaceState(null, "", `${url.pathname}?${url.searchParams.toString()}`);
+  };
+
+  return (
+    <fieldset className="publication-concept-selector preview-concept-selector" aria-label="미리보기 컨셉 선택">
+      <legend>미리보기 컨셉</legend>
+      <div>
+        {publicMenuConceptOptions.map((concept) => (
+          <label key={concept.id} data-selected={concept.id === selected}>
+            <input
+              checked={concept.id === selected}
+              name="previewLayoutConcept"
+              onChange={() => changeConcept(concept.id)}
+              type="radio"
+              value={concept.id}
+            />
+            <span>
+              <strong>{concept.label}</strong>
+              <small>{concept.description}</small>
+            </span>
+          </label>
+        ))}
+      </div>
+    </fieldset>
+  );
+}
+
+function conceptFromLocation(): PublicMenuAvailableConcept {
+  if (typeof window === "undefined") return DEFAULT_PUBLIC_MENU_CONCEPT;
+  const value = new URLSearchParams(window.location.search).get("layoutConcept");
+  return publicMenuConceptOptions.some((concept) => concept.id === value)
+    ? (value as PublicMenuAvailableConcept)
+    : DEFAULT_PUBLIC_MENU_CONCEPT;
+}
+
+function conceptLabel(concept: PublicMenuConcept): string {
+  return publicMenuConceptOptions.find((option) => option.id === concept)?.label ?? "메뉴북형";
+}
+
+function nextPreviewScopeId(
+  data: PublicMenuPreviewResponse,
+  current: string,
+  layoutConcept: PublicMenuAvailableConcept
+): string {
+  const currentStillValid = data.scopeOptions.some((option) => option.id === current);
+  if (layoutConcept !== "menu_book") return currentStillValid ? current : "all";
+  if (currentStillValid && current !== "all") return current;
+  return data.scopeOptions.find((option) => option.type === "category")?.id ?? "all";
 }
 
 function publicMenuStatusLabel(status: string): string {

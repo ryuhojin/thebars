@@ -35,14 +35,29 @@ async function expectNoHorizontalOverflow(page: Page) {
 }
 
 async function expectTouchTargets(page: Page) {
-  const smallTargets = await page.locator("button, input, select, a.button, .nav-link").evaluateAll((elements) =>
-    elements
+  const smallTargets = await page.locator("button, input, select, a.button, .nav-link").evaluateAll((elements) => {
+    const hasExpandedHitTarget = (element: Element, rect: DOMRect): boolean => {
+      const missingHeight = 44 - rect.height;
+      if (missingHeight <= 0) return true;
+      const centerX = rect.left + rect.width / 2;
+      const inset = missingHeight / 2;
+      const topY = Math.max(0, rect.top - inset + 1);
+      const bottomY = Math.min(window.innerHeight - 1, rect.bottom + inset - 1);
+      const matches = (target: Element | null) =>
+        target === element || Boolean(target && (element.contains(target) || target.closest("button, input, select, a.button, .nav-link") === element));
+      return matches(document.elementFromPoint(centerX, topY)) && matches(document.elementFromPoint(centerX, bottomY));
+    };
+
+    return elements
       .map((element) => {
         const rect = element.getBoundingClientRect();
+        if (rect.bottom <= 0 || rect.top >= window.innerHeight) return null;
+        if (rect.height > 0 && rect.height < 44 && hasExpandedHitTarget(element, rect)) return null;
         return { text: element.textContent?.trim() ?? element.getAttribute("aria-label") ?? "", height: rect.height };
       })
-      .filter((item) => item.height > 0 && item.height < 44)
-  );
+      .filter((item): item is { text: string; height: number } => item !== null)
+      .filter((item) => item.height > 0 && item.height < 44);
+  });
   expect(smallTargets).toEqual([]);
 }
 
@@ -58,11 +73,13 @@ for (const viewport of viewports) {
     await expect(page.getByRole("heading", { name: "메뉴판 미리보기" })).toBeVisible();
     await expect(page.getByText("검증 통과")).toBeVisible();
     await expect(page.getByLabel("현재 작업 바")).toHaveValue(barId);
-    await expect(page.locator(".public-menu-card", { hasText: "맥캘란 12" })).toBeVisible();
-    const soldOutCard = page.locator(".public-menu-card", { hasText: "네그로니" });
-    await expect(soldOutCard).toBeVisible();
-    await expect(soldOutCard.locator("b", { hasText: "품절" })).toBeVisible();
-    await expect(soldOutCard.getByText("15,000 KRW")).toHaveCount(0);
+    await page.getByLabel("미리보기 범위").selectOption("all");
+    await expect(page.locator('.public-menu-renderer[data-concept="menu_book"]')).toBeVisible();
+    await expect(page.locator(".book-menu-row", { hasText: "맥캘란 12" })).toBeVisible();
+    const soldOutRow = page.locator(".book-menu-row", { hasText: "네그로니" });
+    await expect(soldOutRow).toBeVisible();
+    await expect(soldOutRow.locator("b", { hasText: "품절" })).toBeVisible();
+    await expect(soldOutRow.getByText("15,000 KRW")).toHaveCount(0);
     await expect(page.getByText("do not publish")).toHaveCount(0);
 
     await page.getByLabel("미리보기 범위").selectOption({ label: "메뉴: 맥캘란 12" });
@@ -81,6 +98,24 @@ for (const viewport of viewports) {
     });
   });
 }
+
+test("D13 public preview uses the active customer menu concept", async ({ page }) => {
+  await page.request.post("/__dev/reset-auth?fixtures=full");
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page, "admin1", "AdminPass!1");
+  const barId = await readSelectedBarId(page);
+
+  await page.goto(`/bars/${barId}/preview?layoutConcept=menu_book`);
+
+  await expect(page).toHaveURL(new RegExp(`/bars/${barId}/preview\\?layoutConcept=menu_book$`));
+  await expect(page.getByRole("radio", { name: /메뉴북형/ })).toBeChecked();
+  await expect(page.locator('.public-menu-renderer[data-concept="menu_book"]')).toBeVisible();
+  await expect(page.getByLabel("미리보기 범위")).not.toHaveValue("all");
+  await expect(page.getByText("Selected Category")).toBeVisible();
+  await expect(page.getByText("고객 화면 컨셉")).toBeVisible();
+  await expect(page.getByText("메뉴북형").first()).toBeVisible();
+  await expect(page.getByRole("radio", { name: /현장 속도형/ })).toHaveCount(0);
+});
 
 test("D13 shell bar selector and role based sidebar", async ({ page }) => {
   await page.request.post("/__dev/reset-auth?fixtures=full");

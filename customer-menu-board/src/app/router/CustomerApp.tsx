@@ -3,8 +3,7 @@ import { fetchPublicMenu, PublicMenuFetchError } from "../../lib/menuFetch";
 import { searchMenu } from "../../menu/search/searchMenu";
 import { CustomerLayout } from "../layout/CustomerLayout";
 import { useEncodedSlug } from "./useEncodedSlug";
-import type { PublicMenu } from "../../../contracts/publicMenu";
-import { flattenPublicCategorySections } from "../../../../shared/publicMenu";
+import { DEFAULT_PUBLIC_MENU_CONCEPT, publicMenuConceptOptions, type PublicMenu } from "../../../contracts/publicMenu";
 
 const IDLE_RESET_MS = 5 * 60 * 1000;
 
@@ -33,7 +32,7 @@ export function CustomerApp() {
     fetchPublicMenu(encodedSlug)
       .then((menu) => {
         if (!cancelled) {
-          setSelectedCategory(getFirstSectionId(menu));
+          setSelectedCategory(getInitialCategoryId(menu));
           setState({ status: "success", menu });
         }
       })
@@ -45,7 +44,7 @@ export function CustomerApp() {
     };
   }, [encodedSlug]);
 
-  const firstSectionId = state.status === "success" ? getFirstSectionId(state.menu) : null;
+  const firstSectionId = state.status === "success" ? getInitialCategoryId(state.menu) : null;
 
   useEffect(() => {
     if (state.status !== "success") return undefined;
@@ -89,8 +88,15 @@ export function CustomerApp() {
       expandedItemId={expandedItemId}
       isInfoExpanded={isInfoExpanded}
       onInfoExpandedChange={setIsInfoExpanded}
-      onQueryChange={setQuery}
-      onSelectCategory={setSelectedCategory}
+      onCloseItemDetail={() => setExpandedItemId(null)}
+      onQueryChange={(nextQuery) => {
+        setQuery(nextQuery);
+        setExpandedItemId(null);
+      }}
+      onSelectCategory={(categoryId) => {
+        setSelectedCategory(categoryId);
+        setExpandedItemId(null);
+      }}
       onToggleItem={(itemId) => setExpandedItemId((current) => (current === itemId ? null : itemId))}
       query={query}
       selectedCategory={selectedCategoryForRender}
@@ -100,8 +106,12 @@ export function CustomerApp() {
   );
 }
 
-function getFirstSectionId(menu: PublicMenu): string | null {
-  return flattenPublicCategorySections(menu.categories)[0]?.id ?? null;
+function getInitialCategoryId(menu: PublicMenu): string | null {
+  const activeConcept = publicMenuConceptOptions.some((option) => option.id === menu.layout.concept)
+    ? menu.layout.concept
+    : DEFAULT_PUBLIC_MENU_CONCEPT;
+  if (activeConcept === "menu_book") return menu.categories[0]?.id ?? null;
+  return menu.categories[0]?.id ?? null;
 }
 
 function loadErrorState(error: unknown): CustomerLoadState {

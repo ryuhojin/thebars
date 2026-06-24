@@ -5,6 +5,7 @@ import { searchMenu } from "../../src/menu/search/searchMenu";
 const fixture = {
   schemaVersion: 1,
   status: "published",
+  layout: { concept: "menu_book" },
   revision: 12,
   publishedAt: "2026-06-23T00:00:00.000Z",
   generatedAt: "2026-06-23T00:00:00.000Z",
@@ -43,7 +44,20 @@ describe("public menu parser", () => {
     const menu = parsePublicMenu(fixture);
 
     expect(menu.bar.name).toBe("Sample Bar");
+    expect(menu.layout.concept).toBe("menu_book");
     expect(menu.categories[0]?.items[0]?.prices[0]?.amountMinor).toBe(12000);
+  });
+
+  it("defaults older public JSON to the menu book concept", () => {
+    const legacyFixture: Record<string, unknown> = { ...fixture };
+    delete legacyFixture.layout;
+    const menu = parsePublicMenu(legacyFixture);
+
+    expect(menu.layout.concept).toBe("menu_book");
+  });
+
+  it("rejects unsupported menu board concepts", () => {
+    expect(() => parsePublicMenu({ ...fixture, layout: { concept: "admin_console" } })).toThrow();
   });
 
   it("parses preparing menus and empty public categories", () => {

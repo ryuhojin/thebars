@@ -159,6 +159,7 @@ export class MemoryMenuItemRepository implements MenuItemRepository {
         volumeText: price.volumeText,
         amountMinor: price.amountMinor,
         displayOrder: price.displayOrder ?? index,
+        isRepresentative: Boolean(price.isRepresentative),
         createdByUserId: updatedByUserId,
         updatedByUserId,
         createdAt: now,

@@ -8,11 +8,12 @@ import {
   type PublicationOperation,
   type PublicationStep,
   type PublicationSummary,
+  type PublishCurrentMenuRequest,
   type PublishCurrentMenuResponse,
   type RepublishSnapshotResponse
 } from "../../contracts/publications";
-import type { PublicMenu } from "../../contracts/publicMenu";
-import { calculatePublicMenuContentHash, parsePublicMenu, stablePublicMenuStringify } from "../../contracts/publicMenu";
+import type { PublicMenu, PublicMenuConcept } from "../../contracts/publicMenu";
+import { calculatePublicMenuContentHash, DEFAULT_PUBLIC_MENU_CONCEPT, parsePublicMenu, stablePublicMenuStringify } from "../../contracts/publicMenu";
 import { nowIso } from "../auth/crypto";
 import { AuthServiceError } from "../auth/errors";
 import type { AuthUserRecord } from "../auth/repository";
@@ -139,7 +140,11 @@ export class PublicationService {
     });
   }
 
-  async publishCurrent(actor: AuthUserRecord, barId: string): Promise<PublishCurrentMenuResponse> {
+  async publishCurrent(
+    actor: AuthUserRecord,
+    barId: string,
+    request: PublishCurrentMenuRequest
+  ): Promise<PublishCurrentMenuResponse> {
     const access = await this.readBarAccess(actor, barId);
     if (!access.canPublish) {
       throw new AuthServiceError(403, "PUBLICATION_PERMISSION_REQUIRED", "이 바를 발행할 권한이 없습니다.");
@@ -149,7 +154,7 @@ export class PublicationService {
     const nextRevision = latestSuccess ? latestSuccess.revision + 1 : 1;
     let built: BuiltPublicationMenu;
     try {
-      built = await this.buildPublicationMenu(actor, barId, nextRevision, nowIso(this.now()));
+      built = await this.buildPublicationMenu(actor, barId, nextRevision, nowIso(this.now()), request.layoutConcept);
     } catch (error) {
       throw mapPublicationError(error);
     }
@@ -362,11 +367,13 @@ export class PublicationService {
     actor: AuthUserRecord,
     barId: string,
     revision: number,
-    publishedAt: string | null
+    publishedAt: string | null,
+    layoutConcept: PublicMenuConcept = DEFAULT_PUBLIC_MENU_CONCEPT
   ): Promise<BuiltPublicationMenu> {
     const preview = await this.menuBuilder(actor, barId);
     const draft: PublicMenu = {
       ...preview.menu,
+      layout: { concept: layoutConcept },
       status: "published",
       revision,
       publishedAt,
@@ -410,6 +417,7 @@ export class PublicationService {
     const draft: Omit<PublicMenu, "contentHash"> = {
       schemaVersion: 1,
       status: "preparing",
+      layout: { concept: DEFAULT_PUBLIC_MENU_CONCEPT },
       revision: 0,
       publishedAt: null,
       generatedAt: nowIso(this.now()),

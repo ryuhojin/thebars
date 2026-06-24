@@ -829,6 +829,7 @@ function previewEnvelope() {
       menu: {
         schemaVersion: 1,
         status: "preparing",
+        layout: { concept: "menu_book" },
         revision: 0,
         publishedAt: null,
         generatedAt: "2026-06-23T00:00:00.000Z",

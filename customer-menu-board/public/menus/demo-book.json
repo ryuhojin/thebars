@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "status": "published",
+  "layout": { "concept": "menu_book" },
+  "revision": 1,
+  "publishedAt": "2026-06-24T00:00:00.000Z",
+  "generatedAt": "2026-06-24T00:00:00.000Z",
+  "contentHash": "4444444444444444444444444444444444444444444444444444444444444444",
+  "encodedSlug": "demo-book",
+  "bar": { "name": "BAR RO", "intro": "선택한 카테고리의 메뉴만 조용히 읽는 디지털 메뉴북", "currency": "KRW", "address": "서울 마포구 와우산로 00", "phoneNumberDisplay": "02-123-4567", "openingNote": "오늘 18:00-02:00", "businessHours": [], "links": [{ "label": "Instagram", "url": "https://example.com/bar-ro" }] },
+  "categories": [
+    { "id": "cat_1", "name": "위스키", "items": [], "children": [
+      { "id": "cat_2", "name": "싱글몰트", "description": "잔 단위로 즐기는 대표 싱글몰트입니다.", "items": [
+        { "id": "menu_1", "name": "맥캘란 12", "description": "셰리 오크, 건과일, 스파이스", "soldOut": false, "abv": 40, "prices": [{ "label": "샷", "amountMinor": 18000, "currency": "KRW" }], "badges": [], "fields": [{ "label": "지역", "value": "Speyside" }] },
+        { "id": "menu_2", "name": "맥캘란 18", "description": "말린 과일, 진한 오크, 긴 여운", "soldOut": false, "abv": 43, "prices": [{ "label": "샷", "amountMinor": 42000, "currency": "KRW" }], "badges": [], "fields": [] },
+        { "id": "menu_3", "name": "글렌피딕 15", "description": "꿀, 바닐라, 부드러운 오크", "soldOut": false, "abv": 40, "prices": [{ "label": "샷", "amountMinor": 21000, "currency": "KRW" }], "badges": [], "fields": [] },
+        { "id": "menu_4", "name": "글렌모렌지 10", "description": "시트러스, 바닐라, 가벼운 몰트", "soldOut": false, "abv": 40, "prices": [{ "label": "샷", "amountMinor": 17000, "currency": "KRW" }], "badges": [], "fields": [] }
+      ], "children": [] },
+      { "id": "cat_3", "name": "피티드", "items": [
+        { "id": "menu_5", "name": "아드벡 10", "description": "강한 피트, 레몬, 드라이한 피니시", "soldOut": false, "abv": 46, "prices": [{ "label": "샷", "amountMinor": 19000, "currency": "KRW" }], "badges": [], "fields": [] },
+        { "id": "menu_6", "name": "탈리스커 10", "description": "후추, 바다 내음, 스모키", "soldOut": false, "abv": 45.8, "prices": [{ "label": "샷", "amountMinor": 18000, "currency": "KRW" }], "badges": [], "fields": [] },
+        { "id": "menu_7", "name": "라프로익 10", "description": "피트, 해조류, 강한 스모키", "soldOut": true, "abv": 40, "prices": [], "badges": [], "fields": [] }
+      ], "children": [] }
+    ] },
+    { "id": "cat_4", "name": "칵테일", "items": [
+      { "id": "menu_8", "name": "올드 패션드", "description": "버번, 비터, 오렌지 필", "soldOut": false, "abv": 32, "prices": [{ "label": "잔", "amountMinor": 18000, "currency": "KRW" }], "badges": [], "fields": [] },
+      { "id": "menu_9", "name": "마티니", "description": "진, 드라이 베르무트, 올리브", "soldOut": false, "abv": 34, "prices": [{ "label": "잔", "amountMinor": 19000, "currency": "KRW" }], "badges": [], "fields": [] },
+      { "id": "menu_10", "name": "네그로니", "description": "진, 캄파리, 스위트 베르무트", "soldOut": true, "abv": 24, "prices": [], "badges": [], "fields": [] }
+    ], "children": [] },
+    { "id": "cat_5", "name": "푸드", "items": [
+      { "id": "menu_11", "name": "치즈 플레이트", "description": "숙성 치즈 3종과 견과류", "soldOut": false, "abv": null, "prices": [{ "label": "플레이트", "amountMinor": 24000, "currency": "KRW" }], "badges": [], "fields": [] },
+      { "id": "menu_12", "name": "올리브", "description": "허브 마리네이드 올리브", "soldOut": false, "abv": null, "prices": [{ "label": "접시", "amountMinor": 9000, "currency": "KRW" }], "badges": [], "fields": [] }
+    ], "children": [] }
+  ]
+}

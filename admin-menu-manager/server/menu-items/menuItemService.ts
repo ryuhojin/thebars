@@ -128,7 +128,7 @@ export class MenuItemService {
       });
       const now = nowIso(this.now());
       if (input.prices !== undefined) {
-        await this.repository.replaceMenuItemPrices(barId, created.id, this.toPriceInputs(input.prices), actor.id, now);
+        await this.repository.replaceMenuItemPrices(barId, created.id, this.toPriceInputs(input.prices, itemType.template), actor.id, now);
       }
       if (input.details) {
         const details = parseDetailsForTemplate(input.details, itemType.template);
@@ -189,7 +189,7 @@ export class MenuItemService {
       if (!updated) throw new AuthServiceError(404, "MENU_ITEM_NOT_FOUND", "메뉴를 찾을 수 없습니다.");
       const now = nowIso(this.now());
       if (input.prices !== undefined) {
-        await this.repository.replaceMenuItemPrices(barId, menuItemId, this.toPriceInputs(input.prices), actor.id, now);
+        await this.repository.replaceMenuItemPrices(barId, menuItemId, this.toPriceInputs(input.prices, itemType.template), actor.id, now);
       }
       if (nextDetails) {
         await this.repository.upsertMenuItemDetails({
@@ -424,7 +424,8 @@ export class MenuItemService {
           normalizedLabel: price.normalizedLabel,
           volumeText: price.volumeText,
           amountMinor: price.amountMinor,
-          displayOrder: price.displayOrder
+          displayOrder: price.displayOrder,
+          isRepresentative: price.isRepresentative
         })),
       badges: badges
         .sort((left, right) => left.displayOrder - right.displayOrder)
@@ -455,7 +456,7 @@ export class MenuItemService {
     return null;
   }
 
-  private toPriceInputs(prices: MenuItemPriceRequest[]): MenuItemPriceInput[] {
+  private toPriceInputs(prices: MenuItemPriceRequest[], template: ItemTemplate): MenuItemPriceInput[] {
     const seen = new Set<string>();
     const ordered = prices
       .map((price, index) => ({
@@ -464,6 +465,12 @@ export class MenuItemService {
         requestedOrder: price.displayOrder ?? index
       }))
       .sort((left, right) => left.requestedOrder - right.requestedOrder || left.inputIndex - right.inputIndex);
+    const explicitRepresentativeCount = ordered.filter((price) => price.isRepresentative).length;
+    if (explicitRepresentativeCount > 1) {
+      throw new AuthServiceError(409, "MENU_PRICE_REPRESENTATIVE_CONFLICT", "대표 가격은 하나만 지정할 수 있습니다.");
+    }
+    const fallbackRepresentativeIndex =
+      explicitRepresentativeCount === 0 && ordered.length > 0 ? defaultRepresentativePriceIndex(ordered, template) : -1;
     return ordered.map((price, index) => {
       const normalizedLabel = normalizeMenuPriceLabel(price.label);
       if (seen.has(normalizedLabel)) {
@@ -476,7 +483,8 @@ export class MenuItemService {
         normalizedLabel,
         volumeText: price.volumeText ?? "",
         amountMinor: price.amountMinor,
-        displayOrder: index
+        displayOrder: index,
+        isRepresentative: explicitRepresentativeCount === 1 ? Boolean(price.isRepresentative) : index === fallbackRepresentativeIndex
       };
     });
   }
@@ -583,6 +591,15 @@ function detailsHasContent(details: MenuItemDetails): boolean {
     if (typeof value === "boolean") return value;
     return value !== null && value !== undefined;
   });
+}
+
+function defaultRepresentativePriceIndex(prices: MenuItemPriceRequest[], template: ItemTemplate): number {
+  const preferredLabels: Partial<Record<ItemTemplate, string[]>> = {
+    whisky: ["샷", "1샷", "shot", "1 shot", "one shot"],
+    wine: ["바틀", "보틀", "병", "bottle", "btl"]
+  };
+  const preferred = prices.findIndex((price) => (preferredLabels[template] ?? []).includes(normalizeMenuPriceLabel(price.label)));
+  return preferred >= 0 ? preferred : 0;
 }
 
 function filterMenuItems(items: MenuItem[], query: MenuItemListQuery): MenuItem[] {

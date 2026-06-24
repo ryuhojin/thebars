@@ -48,6 +48,7 @@ type PriceForm = {
   label: string;
   volumeText: string;
   amountMinor: string;
+  isRepresentative: boolean;
 };
 
 type EditorMode = "creating" | "editing";
@@ -556,8 +557,8 @@ export function MenuItemEditorPage({
       itemTypeKey: value,
       prices:
         current.prices.length === 0 && nextType?.defaultPriceLabels.length
-          ? nextType.defaultPriceLabels.map((label) => ({ localId: nextLocalId(), label, volumeText: "", amountMinor: "" }))
-          : current.prices,
+          ? defaultPricesForType(nextType)
+          : ensureRepresentativePrices(current.prices, nextTemplate),
       details: current.details.template === nextTemplate ? current.details : defaultDetails(nextTemplate),
       confirmDetailReset: false
     }));
@@ -567,6 +568,13 @@ export function MenuItemEditorPage({
     setForm((current) => ({
       ...current,
       prices: current.prices.map((price, itemIndex) => (itemIndex === index ? { ...price, ...patch } : price))
+    }));
+  };
+
+  const setRepresentativePrice = (index: number) => {
+    setForm((current) => ({
+      ...current,
+      prices: current.prices.map((price, itemIndex) => ({ ...price, isRepresentative: itemIndex === index }))
     }));
   };
 
@@ -745,7 +753,10 @@ export function MenuItemEditorPage({
               onClick={() =>
                 setForm((current) => ({
                   ...current,
-                  prices: [...current.prices, { localId: nextLocalId(), label: "", volumeText: "", amountMinor: "" }]
+                  prices: [
+                    ...current.prices,
+                    { localId: nextLocalId(), label: "", volumeText: "", amountMinor: "", isRepresentative: current.prices.length === 0 }
+                  ]
                 }))
               }
             >
@@ -804,6 +815,17 @@ export function MenuItemEditorPage({
                       placeholder="18000"
                     />
                   </label>
+                  <label className="check-row price-representative-toggle">
+                    <input
+                      aria-label={`대표 가격 ${index + 1}`}
+                      type="radio"
+                      name="representativePrice"
+                      checked={price.isRepresentative}
+                      disabled={!canEdit}
+                      onChange={() => setRepresentativePrice(index)}
+                    />
+                    고객 메뉴판 대표
+                  </label>
                   <div className="price-row-actions">
                     <button className="icon-button" type="button" disabled={!canEdit || index === 0} onClick={() => movePrice(index, index - 1)} aria-label={`가격 ${index + 1} 위로`}>
                       ↑
@@ -821,7 +843,15 @@ export function MenuItemEditorPage({
                       className="icon-button danger"
                       type="button"
                       disabled={!canEdit}
-                      onClick={() => setForm((current) => ({ ...current, prices: current.prices.filter((_, itemIndex) => itemIndex !== index) }))}
+                      onClick={() =>
+                        setForm((current) => ({
+                          ...current,
+                          prices: ensureRepresentativePrices(
+                            current.prices.filter((_, itemIndex) => itemIndex !== index),
+                            selectedTemplate
+                          )
+                        }))
+                      }
                       aria-label={`가격 ${index + 1} 삭제`}
                     >
                       ×
@@ -1676,6 +1706,40 @@ function emptyMenuForm(categoryId = ""): MenuForm {
   };
 }
 
+function defaultPricesForType(type: MenuItemTypeOption): PriceForm[] {
+  const representativeIndex = defaultRepresentativePriceIndex(type.defaultPriceLabels, type.template);
+  return type.defaultPriceLabels.map((label, index) => ({
+    localId: nextLocalId(),
+    label,
+    volumeText: "",
+    amountMinor: "",
+    isRepresentative: index === representativeIndex
+  }));
+}
+
+function ensureRepresentativePrices(prices: PriceForm[], template: DetailTemplate): PriceForm[] {
+  if (prices.length === 0) return prices;
+  const firstRepresentative = prices.findIndex((price) => price.isRepresentative);
+  if (firstRepresentative >= 0) {
+    return prices.map((price, index) => ({ ...price, isRepresentative: index === firstRepresentative }));
+  }
+  const representativeIndex = defaultRepresentativePriceIndex(prices.map((price) => price.label), template);
+  return prices.map((price, index) => ({ ...price, isRepresentative: index === representativeIndex }));
+}
+
+function defaultRepresentativePriceIndex(labels: string[], template: DetailTemplate): number {
+  const preferredLabels: Partial<Record<DetailTemplate, string[]>> = {
+    whisky: ["샷", "1샷", "shot", "1 shot", "one shot"],
+    wine: ["바틀", "보틀", "병", "bottle", "btl"]
+  };
+  const preferred = labels.findIndex((label) => (preferredLabels[template] ?? []).includes(normalizePriceLabel(label)));
+  return preferred >= 0 ? preferred : 0;
+}
+
+function normalizePriceLabel(label: string): string {
+  return label.normalize("NFKC").trim().replace(/\s+/g, " ").toLowerCase();
+}
+
 function menuToForm(item: MenuItemDetail | null | undefined): MenuForm {
   if (!item) return emptyMenuForm();
   const template = item.details?.template ?? item.itemType?.template ?? "general";
@@ -1691,7 +1755,8 @@ function menuToForm(item: MenuItemDetail | null | undefined): MenuForm {
       localId: price.id,
       label: price.label,
       volumeText: price.volumeText,
-      amountMinor: String(price.amountMinor)
+      amountMinor: String(price.amountMinor),
+      isRepresentative: price.isRepresentative
     })),
     details: item.details ?? defaultDetails(template),
     internalMemo: item.internalMemo ?? "",
@@ -1716,7 +1781,8 @@ function formToPayload(
   }
   const normalizedPriceLabels = new Set<string>();
   const prices: MenuItemPriceInput[] = [];
-  form.prices.forEach((price, index) => {
+  const priceForms = ensureRepresentativePrices(form.prices, form.details.template);
+  priceForms.forEach((price, index) => {
     const label = price.label.trim();
     const amountText = price.amountMinor.trim();
     const amountMinor = Number(amountText);
@@ -1729,7 +1795,8 @@ function formToPayload(
       label,
       volumeText: price.volumeText.trim(),
       amountMinor,
-      displayOrder: index
+      displayOrder: index,
+      isRepresentative: price.isRepresentative
     });
   });
   if (!form.categoryId) errors.categoryId = ["카테고리를 선택하세요."];

@@ -195,7 +195,10 @@ async function seedPreviewMenu(runtime: PreviewRuntime) {
     description: "셰리 오크",
     abv: 40,
     itemType: { source: "system", id: "system-type-whisky" },
-    prices: [{ label: "샷", volumeText: "30ml", amountMinor: 18000 }],
+    prices: [
+      { label: "샷", volumeText: "30ml", amountMinor: 18000 },
+      { label: "보틀", volumeText: "700ml", amountMinor: 280000 }
+    ],
     details: {
       template: "whisky",
       brand: "Macallan",
@@ -278,6 +281,7 @@ describe("D13 public preview API", () => {
       prices: [{ label: "샷", volumeText: "30ml", amountMinor: 18000, currency: "KRW" }],
       badges: [{ label: "추천" }]
     });
+    expect(items[0]?.prices).toHaveLength(1);
     expect(items[0]?.fields).toEqual(expect.arrayContaining([{ label: "브랜드", value: "Macallan" }]));
     expect(items[1]).toMatchObject({
       name: "네그로니",
@@ -286,6 +290,36 @@ describe("D13 public preview API", () => {
       badges: []
     });
     expect(firstBody.scopeOptions.some((option) => option.type === "menu" && option.label.includes("맥캘란"))).toBe(true);
+  });
+
+  it("defaults preview layout concept to the active menu book concept", async () => {
+    const runtime = createRuntime();
+    const { bar, staff } = await seedPreviewMenu(runtime);
+
+    const defaultResponse = await runtime.app.request(`/api/bars/${bar.id}/preview`, { headers: { cookie: staff.cookie } });
+    const bookResponse = await runtime.app.request(`/api/bars/${bar.id}/preview?layoutConcept=menu_book`, { headers: { cookie: staff.cookie } });
+    const defaultBody = (await readJsonObject(defaultResponse)).data as PublicMenuPreviewResponse;
+    const bookBody = (await readJsonObject(bookResponse)).data as PublicMenuPreviewResponse;
+
+    expect(bookResponse.status).toBe(200);
+    expect(defaultBody.menu.layout.concept).toBe("menu_book");
+    expect(bookBody.menu.layout.concept).toBe("menu_book");
+    expect(bookBody.hash.contentHash).toBe(defaultBody.hash.contentHash);
+    await expect(calculatePublicMenuContentHash(parsePublicMenu(bookBody.menu))).resolves.toBe(bookBody.hash.contentHash);
+  });
+
+  it("rejects invalid preview layout concepts", async () => {
+    const runtime = createRuntime();
+    const { bar, staff } = await seedPreviewMenu(runtime);
+
+    const response = await runtime.app.request(`/api/bars/${bar.id}/preview?layoutConcept=dev_mode`, { headers: { cookie: staff.cookie } });
+
+    expect(response.status).toBe(400);
+    expect(await readJsonObject(response)).toMatchObject({ error: { code: "INPUT_INVALID" } });
+
+    const inactiveConcept = await runtime.app.request(`/api/bars/${bar.id}/preview?layoutConcept=curation`, { headers: { cookie: staff.cookie } });
+    expect(inactiveConcept.status).toBe(400);
+    expect(await readJsonObject(inactiveConcept)).toMatchObject({ error: { code: "INPUT_INVALID" } });
   });
 
   it("hides other tenant bars as not found", async () => {

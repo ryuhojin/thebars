@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import { index, integer, sqliteTable, text, uniqueIndex, type AnySQLiteColumn } from "drizzle-orm/sqlite-core";
 
 export const d00FoundationSmoke = sqliteTable("_d00_foundation_smoke", {
@@ -341,6 +342,7 @@ export const menuItemPrices = sqliteTable(
     volumeText: text("volume_text").notNull().default(""),
     amountMinor: integer("amount_minor").notNull(),
     displayOrder: integer("display_order").notNull(),
+    isRepresentative: integer("is_representative", { mode: "boolean" }).notNull().default(false),
     createdByUserId: text("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
     updatedByUserId: text("updated_by_user_id").references(() => users.id, { onDelete: "set null" }),
     createdAt: text("created_at").notNull(),
@@ -348,6 +350,9 @@ export const menuItemPrices = sqliteTable(
   },
   (table) => ({
     menuLabelUnique: uniqueIndex("menu_item_prices_menu_label_unique").on(table.barId, table.menuItemId, table.normalizedLabel),
+    menuRepresentativeUnique: uniqueIndex("menu_item_prices_single_representative_idx")
+      .on(table.barId, table.menuItemId)
+      .where(sql`${table.isRepresentative} = 1`),
     menuOrderIndex: index("menu_item_prices_menu_order_idx").on(table.barId, table.menuItemId, table.displayOrder),
     menuIndex: index("menu_item_prices_menu_idx").on(table.menuItemId)
   })

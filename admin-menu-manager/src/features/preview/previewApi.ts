@@ -1,9 +1,14 @@
 import type { PublicMenuPreviewResponse } from "../../../contracts/preview";
+import { DEFAULT_PUBLIC_MENU_CONCEPT, type PublicMenuAvailableConcept } from "../../../contracts/publicMenu";
 import type { ApiEnvelope } from "../auth/authApi";
 import { AuthApiError } from "../auth/authApi";
 
-export async function readPublicMenuPreview(barId: string): Promise<PublicMenuPreviewResponse> {
-  const response = await fetch(`/api/bars/${encodeURIComponent(barId)}/preview`, {
+export async function readPublicMenuPreview(
+  barId: string,
+  layoutConcept: PublicMenuAvailableConcept = DEFAULT_PUBLIC_MENU_CONCEPT
+): Promise<PublicMenuPreviewResponse> {
+  const params = new URLSearchParams({ layoutConcept });
+  const response = await fetch(`/api/bars/${encodeURIComponent(barId)}/preview?${params.toString()}`, {
     headers: { accept: "application/json" },
     credentials: "include"
   });

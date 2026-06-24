@@ -24,7 +24,7 @@
 ## Information architecture
 - Primary navigation: 동일 관리자 앱 셸에서 권한에 맞는 메뉴만 표시한다.
 - Core routes/screens: `/dashboard`, `/bars`, `/bars/{barId}`, `/bars/{barId}/menus`, `/bars/{barId}/publications`, `/bars/{barId}/orders`, `/system/*`.
-- Content hierarchy: 현재 작업 바와 계정 컨텍스트가 상단에 있고, 사이드바는 권한과 선택 바를 기준으로 최소 메뉴만 노출한다. 현장 사용성이 중요한 compact·medium에서는 주문 운영 그룹을 가장 먼저 탐색할 수 있어야 한다.
+- Content hierarchy: 현재 작업 바와 계정 컨텍스트가 상단에 있고, 사이드바는 권한과 선택 바를 기준으로 최소 메뉴만 노출한다. 현장 사용성이 중요한 compact·medium에서는 주문 운영 그룹을 가장 먼저 탐색할 수 있어야 한다. 고객 메뉴판은 같은 `/{encodedSlug}` 경로에서 발행 JSON의 `layout.concept`에 따라 클래식 레일형, 현장 속도형, 큐레이션형, 메뉴북형을 표시한다.
 
 ## Design principles
 - Principle 1: 운영자가 보는 문구는 업무 언어여야 한다. 코드값은 저장소와 API 계약에 남기되 기본 UI에는 표시하지 않는다.
@@ -41,7 +41,7 @@
 
 ## Components
 - Existing components to reuse: `AppShell`, `AdaptiveDialog`, `data-table`, `data-card`, `status-badge`, `field`, `button`, `panel`, `hero-panel`.
-- New/changed components: 공통 리스트 표면은 CSS token 기반 grid 스타일로 통일한다. 품목 유형 편집은 생성 시작 시 편집 패널로 스크롤/포커스한다.
+- New/changed components: 공통 리스트 표면은 CSS token 기반 grid 스타일로 통일한다. 품목 유형 편집은 생성 시작 시 편집 패널로 스크롤/포커스한다. 고객 메뉴판 `PublicMenuRenderer`는 public JSON의 컨셉 계약을 유지하되 현재 활성 옵션은 메뉴북형만 노출한다. 관리자 미리보기는 `layoutConcept` query와 같은 renderer 스타일로 발행 전 고객 화면 컨셉을 검증하며, 메뉴북형 검색·매장 정보·메뉴 상세는 하단 확장 없이 팝업으로 처리한다.
 - Variants and states: loading, empty, error, forbidden, conflict, success, disabled, selected, hover를 구분한다.
 - Token/component ownership: `admin-menu-manager/src/styles/tokens.css`와 `global.css`가 현재 디자인 시스템의 소스다.
 
@@ -54,7 +54,7 @@
 
 ## Responsive behavior
 - Supported breakpoints/devices: 390x844, 768x1024, 1440x900.
-- Layout adaptations: 같은 route와 component를 유지하고 CSS media/container query로 table/card, drawer/sidebar, dialog/sheet 표현만 바꾼다. 모바일 drawer와 태블릿 sidebar는 주문 운영을 우선 노출하되 권한 없는 기능은 계속 숨긴다.
+- Layout adaptations: 같은 route와 component를 유지하고 CSS media/container query로 table/card, drawer/sidebar, dialog/sheet 표현만 바꾼다. 모바일 drawer와 태블릿 sidebar는 주문 운영을 우선 노출하되 권한 없는 기능은 계속 숨긴다. 메뉴북형 고객 메뉴판은 compact 1열, medium 2열, wide 3열 지면형 메뉴를 사용하며 검색은 버튼 팝업으로 접는다.
 - Touch/hover differences: compact에서는 주요 액션을 카드와 sticky action으로 접근 가능하게 하고, hover에만 의존하지 않는다.
 
 ## Interaction states

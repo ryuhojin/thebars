@@ -56,15 +56,20 @@ for (const viewport of viewports) {
     await expect(page.getByRole("heading", { name: "발행·배포 상태" })).toBeVisible();
     await expect(page.getByText(/public\/menus\//)).toBeVisible();
     await expect(page.getByLabel("현재 작업 바")).toHaveValue(barId);
+    await expect(page.getByRole("radio", { name: /메뉴북형/ })).toBeVisible();
+    await page.getByRole("radio", { name: /메뉴북형/ }).check();
 
     await page.getByRole("button", { name: "발행 시작" }).click();
     await expect(page.getByRole("heading", { name: "저장된 메뉴판을 발행할까요?" })).toBeVisible();
+    await expect(page.getByText("메뉴북형으로 고객 메뉴판을 표시합니다.")).toBeVisible();
     await page.setViewportSize({ width: 390, height: 844 });
     await expect(page).toHaveURL(new RegExp(`/bars/${barId}/publications$`));
     await expect(page.getByRole("heading", { name: "저장된 메뉴판을 발행할까요?" })).toBeVisible();
 
+    let publishPayload: unknown = null;
     await page.route(/\/api\/bars\/[^/]+\/publications$/, async (route) => {
       if (route.request().method() === "POST") {
+        publishPayload = route.request().postDataJSON();
         await new Promise((resolve) => setTimeout(resolve, 150));
       }
       await route.continue();
@@ -74,6 +79,7 @@ for (const viewport of viewports) {
     await expect(page.getByText("고객 배포 완료")).toBeVisible();
     await expect(page.getByText(/반영 번호/).first()).toBeVisible();
     await expect(page.getByText("대상 반영 번호와 일치하는 고객 화면 배포가 성공했습니다.")).toBeVisible();
+    expect(publishPayload).toMatchObject({ confirmSavedOnly: true, layoutConcept: "menu_book" });
 
     await page.getByRole("button", { name: "상세" }).click();
     const detailDialog = page.getByRole("dialog", { name: "발행 상세" });
@@ -116,4 +122,20 @@ test("D15 menu screen publish action opens the same publications route", async (
 
   await expect(page).toHaveURL(new RegExp(`/bars/${barId}/publications$`));
   await expect(page.getByRole("heading", { name: "발행·배포 상태" })).toBeVisible();
+});
+
+test("D15 publication preview button carries the selected menu concept", async ({ page }) => {
+  await page.request.post("/__dev/reset-auth?fixtures=full");
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page, "admin1", "AdminPass!1");
+  const barId = await readSelectedBarId(page);
+
+  await page.goto(`/bars/${barId}/publications`);
+  await expect(page.getByRole("heading", { name: "발행·배포 상태" })).toBeVisible();
+  await page.getByRole("radio", { name: /메뉴북형/ }).check();
+  await page.getByRole("button", { name: "미리보기" }).click();
+
+  await expect(page).toHaveURL(new RegExp(`/bars/${barId}/preview\\?layoutConcept=menu_book$`));
+  await expect(page.getByRole("radio", { name: /메뉴북형/ })).toBeChecked();
+  await expect(page.locator('.public-menu-renderer[data-concept="menu_book"]')).toBeVisible();
 });

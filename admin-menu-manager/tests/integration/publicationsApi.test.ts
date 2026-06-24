@@ -270,17 +270,32 @@ describe("D15 publications API", () => {
     const { bar, admin } = await seedPublishableBar(runtime);
 
     const response = await postJson(runtime.app, `/api/bars/${bar.id}/publications`, {}, admin.cookie, admin.csrf);
+    const invalidConcept = await postJson(
+      runtime.app,
+      `/api/bars/${bar.id}/publications`,
+      { confirmSavedOnly: true, layoutConcept: "admin_console" },
+      admin.cookie,
+      admin.csrf
+    );
 
     expect(response.status).toBe(400);
     expect(await readJsonObject(response)).toMatchObject({ error: { code: "INPUT_INVALID" } });
+    expect(invalidConcept.status).toBe(400);
+    expect(await readJsonObject(invalidConcept)).toMatchObject({ error: { code: "INPUT_INVALID" } });
     expect(runtime.github.commits).toHaveLength(0);
   });
 
-  it("commits schema-valid menu JSON and excludes private fields", async () => {
+  it("commits schema-valid menu JSON with the selected customer concept and excludes private fields", async () => {
     const runtime = createRuntime();
     const { bar, admin } = await seedPublishableBar(runtime);
 
-    const response = await postJson(runtime.app, `/api/bars/${bar.id}/publications`, { confirmSavedOnly: true }, admin.cookie, admin.csrf);
+    const response = await postJson(
+      runtime.app,
+      `/api/bars/${bar.id}/publications`,
+      { confirmSavedOnly: true, layoutConcept: "menu_book" },
+      admin.cookie,
+      admin.csrf
+    );
     const body = (await readJsonObject(response)).data as PublishCurrentMenuResponse;
 
     expect(response.status).toBe(201);
@@ -303,6 +318,7 @@ describe("D15 publications API", () => {
     });
     expect(runtime.github.commits).toHaveLength(1);
     const file = await runtime.github.readFile(`public/menus/${bar.encodedSlug}.json`);
+    expect(JSON.parse(file?.content ?? "{}")).toMatchObject({ layout: { concept: "menu_book" } });
     expect(file?.content).toContain("\"status\":\"published\"");
     expect(file?.content).toContain("\"revision\":1");
     expect(file?.content).not.toMatch(/internalMemo|public 제외|userId|barId|token|password/);
@@ -324,6 +340,28 @@ describe("D15 publications API", () => {
     expect(second.publication.publishedAt).toBe(first.publication.publishedAt);
     expect(second.commit.path).toBe(`public/publish-triggers/${bar.encodedSlug}.json`);
     expect(runtime.github.commits.map((commit) => commit.operation)).toEqual(["menu_json", "trigger"]);
+  });
+
+  it("rejects inactive customer concepts instead of publishing removed designs", async () => {
+    const runtime = createRuntime();
+    const { bar, admin } = await seedPublishableBar(runtime);
+
+    const firstResponse = await postJson(runtime.app, `/api/bars/${bar.id}/publications`, { confirmSavedOnly: true }, admin.cookie, admin.csrf);
+    const first = (await readJsonObject(firstResponse)).data as PublishCurrentMenuResponse;
+    const secondResponse = await postJson(
+      runtime.app,
+      `/api/bars/${bar.id}/publications`,
+      { confirmSavedOnly: true, layoutConcept: "curation" },
+      admin.cookie,
+      admin.csrf
+    );
+
+    expect(first.publication.operation).toBe("menu_json");
+    expect(secondResponse.status).toBe(400);
+    expect(await readJsonObject(secondResponse)).toMatchObject({ error: { code: "INPUT_INVALID" } });
+    const file = await runtime.github.readFile(`public/menus/${bar.encodedSlug}.json`);
+    expect(JSON.parse(file?.content ?? "{}")).toMatchObject({ layout: { concept: "menu_book" } });
+    expect(runtime.github.commits).toHaveLength(1);
   });
 
   it("does not commit when public schema validation fails", async () => {

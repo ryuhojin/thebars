@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="THE BAR 고객 메뉴판 UI 방향성 비교 와이어프레임" />
+  <title>THE BAR 고객 메뉴판 시안</title>
+  <link rel="stylesheet" href="customer-menu-variants.css" />
+</head>
+<body>
+  <header class="page-header">
+    <div>
+      <p class="eyebrow">THE BAR Customer Menu</p>
+      <h1>고객 메뉴판 UI 시안 - 메뉴북형</h1>
+      <p>현재 상용 후보는 메뉴북형 하나만 사용합니다. 컨셉 선택 구조는 향후 새 디자인을 추가할 수 있도록 유지합니다.</p>
+    </div>
+    <nav class="variant-tabs" aria-label="시안 바로가기">
+      <a href="#concept-d">D 메뉴북형</a>
+    </nav>
+  </header>
+
+  <main>
+    <section class="decision-strip" aria-label="비교 요약">
+      <article>
+        <strong>메뉴북형</strong>
+        <span>종이 메뉴판에 가까운 차분한 구성만 현재 운영 후보로 남깁니다. 검색, 매장 정보, 메뉴 상세는 팝업으로 처리합니다.</span>
+      </article>
+    </section>
+
+    <section id="concept-a" class="concept concept-a">
+      <div class="concept-copy">
+        <p class="eyebrow">Concept A</p>
+        <h2>클래식 레일형</h2>
+        <p>wide에서는 좌측 카테고리 레일과 2열 메뉴 카드, compact에서는 sticky 카테고리 칩과 1열 카드로 전환합니다.</p>
+        <dl>
+          <div><dt>추천 상황</dt><dd>초기 상용 기본안, 메뉴 수 30~80개</dd></div>
+          <div><dt>장점</dt><dd>탐색 구조가 명확하고 WF-22와 가장 가깝습니다.</dd></div>
+          <div><dt>주의</dt><dd>브랜드 개성을 강하게 보여주려면 상단 정보 디자인을 더 다듬어야 합니다.</dd></div>
+        </dl>
+      </div>
+      <div class="menu-shell rail-menu" aria-label="클래식 레일형 미리보기">
+        <header class="bar-hero">
+          <div>
+            <span class="open-badge">오늘 18:00-02:00</span>
+            <h3>BAR RO</h3>
+            <p>위스키와 클래식 칵테일, 간단한 페어링 푸드를 준비합니다.</p>
+          </div>
+          <address>서울 마포구 와우산로 00 · 02-123-4567</address>
+        </header>
+        <div class="menu-layout">
+          <aside class="category-rail">
+            <a class="active">추천</a><a>위스키</a><a>칵테일</a><a>와인</a><a>푸드</a><a>시가</a>
+          </aside>
+          <div class="menu-content">
+            <label class="search-field"><span>검색</span><input value="맥" aria-label="메뉴 검색" /></label>
+            <section class="menu-section">
+              <div class="section-title"><h4>추천</h4><span>4 items</span></div>
+              <div class="card-grid">
+                <article class="menu-card"><div><strong>맥캘란 12</strong><p>셰리 오크, 건과일, 스파이스</p></div><b>샷 18,000</b><small>40% ABV · Speyside</small></article>
+                <article class="menu-card soldout"><div><strong>네그로니</strong><p>진, 캄파리, 스위트 베르무트</p></div><b>품절</b><small>가격과 용량 숨김</small></article>
+                <article class="menu-card"><div><strong>치즈 플레이트</strong><p>숙성 치즈 3종과 견과류</p></div><b>24,000</b><small>페어링 추천</small></article>
+                <article class="menu-card"><div><strong>Montecristo No.4</strong><p>Medium strength, 약 45분</p></div><b>38,000</b><small>Cuba · Petit Corona</small></article>
+              </div>
+            </section>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="concept-b" class="concept concept-b">
+      <div class="concept-copy">
+        <p class="eyebrow">Concept B</p>
+        <h2>현장 속도형</h2>
+        <p>메뉴 검색과 품절/가격 확인을 최우선으로 둔 조밀한 리스트형입니다. 손님이 QR을 열고 바로 찾는 흐름에 맞습니다.</p>
+        <dl>
+          <div><dt>추천 상황</dt><dd>칵테일·푸드처럼 회전이 빠른 바, 모바일 비중이 높은 매장</dd></div>
+          <div><dt>장점</dt><dd>compact에서 가장 효율적이고 스크롤 피로가 적습니다.</dd></div>
+          <div><dt>주의</dt><dd>사진이나 브랜드 감성보다 정보 탐색이 우선입니다.</dd></div>
+        </dl>
+      </div>
+      <div class="menu-shell speed-menu" aria-label="현장 속도형 미리보기">
+        <header class="speed-header">
+          <div><h3>BAR RO</h3><span>영업 중 · 02:00 마감</span></div>
+          <button type="button">정보</button>
+        </header>
+        <div class="sticky-search">
+          <input value="하이볼" aria-label="메뉴 검색" />
+          <div class="quick-chips"><button class="active">전체</button><button>추천</button><button>품절 제외</button><button>시가</button></div>
+        </div>
+        <section class="dense-list">
+          <h4>검색 결과</h4>
+          <article><div><strong>하우스 하이볼</strong><p>산뜻한 시트러스, 탄산감</p></div><b>12,000</b></article>
+          <article><div><strong>피트 하이볼</strong><p>스모키, 레몬 필</p></div><b>15,000</b></article>
+          <article><div><strong>진저 하이볼</strong><p>진저에일, 라임</p></div><b>13,000</b></article>
+          <article class="muted"><div><strong>네그로니</strong><p>오늘 준비 수량 소진</p></div><b>품절</b></article>
+        </section>
+        <footer class="compact-info">주소 · 전화 · Instagram은 바 정보에서 확인</footer>
+      </div>
+    </section>
+
+    <section id="concept-c" class="concept concept-c">
+      <div class="concept-copy">
+        <p class="eyebrow">Concept C</p>
+        <h2>큐레이션형</h2>
+        <p>추천 세트와 테이스팅 노트를 강조합니다. 단순 가격표보다 “이 바에서 무엇을 마셔야 하는지”를 안내합니다.</p>
+        <dl>
+          <div><dt>추천 상황</dt><dd>와인바, 위스키바, 시가 메뉴가 중요한 매장</dd></div>
+          <div><dt>장점</dt><dd>객단가 높은 메뉴의 설명 가치가 살아납니다.</dd></div>
+          <div><dt>주의</dt><dd>운영자가 상세 설명을 충실히 입력해야 완성도가 높습니다.</dd></div>
+        </dl>
+      </div>
+      <div class="menu-shell curation-menu" aria-label="큐레이션형 미리보기">
+        <header class="curation-hero">
+          <p>Tonight's Picks</p>
+          <h3>BAR RO에서 오늘 먼저 권하는 3잔</h3>
+        </header>
+        <div class="curation-grid">
+          <aside class="pick-panel">
+            <strong>추천 코스</strong>
+            <button class="active">입문자용</button>
+            <button>스모키 위스키</button>
+            <button>시가 페어링</button>
+          </aside>
+          <main>
+            <div class="feature-card">
+              <span>대표 추천</span>
+              <h4>맥캘란 12 · 샷</h4>
+              <p>달콤한 셰리와 부드러운 오크감. 처음 방문한 손님에게 안정적으로 권하기 좋습니다.</p>
+              <b>18,000</b>
+            </div>
+            <div class="note-list">
+              <article><strong>글렌피딕 15</strong><span>Honey · Oak · 21,000</span></article>
+              <article><strong>올드 패션드</strong><span>Classic · Orange peel · 18,000</span></article>
+              <article class="soldout"><strong>네그로니</strong><span>품절 · 가격 숨김</span></article>
+            </div>
+          </main>
+        </div>
+      </div>
+    </section>
+
+    <section id="concept-d" class="concept concept-d">
+      <div class="concept-copy">
+        <p class="eyebrow">Concept D</p>
+        <h2>메뉴북형</h2>
+        <p>종이 메뉴판을 디지털로 옮긴 듯한 차분한 형태입니다. 큰 액션보다 섹션과 가격표의 읽기 경험을 우선합니다.</p>
+        <dl>
+          <div><dt>추천 상황</dt><dd>고급 바, 메뉴 수가 많지 않고 분위기를 중시하는 매장</dd></div>
+          <div><dt>장점</dt><dd>차분하고 상용 서비스 느낌이 강합니다.</dd></div>
+          <div><dt>주의</dt><dd>검색은 제공하되 A/B안보다 화면 밀도는 낮습니다.</dd></div>
+        </dl>
+      </div>
+      <div class="menu-shell book-menu" aria-label="메뉴북형 미리보기">
+        <header>
+          <span>THE BAR SELECTION</span>
+          <h3>BAR RO</h3>
+          <div class="book-subline">
+            <p>선택한 카테고리의 메뉴만 조용히 읽는 디지털 메뉴북</p>
+            <div class="book-command-row" aria-label="메뉴판 도구">
+              <details class="book-search-menu">
+                <summary>검색</summary>
+                <div class="book-search-popover" role="dialog" aria-label="검색 팝업">
+                  <label class="book-search">
+                    <span>메뉴 검색</span>
+                    <input value="맥캘란" aria-label="메뉴 검색" />
+                  </label>
+                  <div class="book-popover-actions">
+                    <button type="button">닫기</button>
+                    <button type="button">검색</button>
+                  </div>
+                </div>
+              </details>
+              <button class="book-tool-button" type="button">매장 정보</button>
+            </div>
+          </div>
+        </header>
+        <div class="book-tools">
+          <nav class="book-category-select" aria-label="카테고리 선택">
+            <button class="active" type="button">위스키</button>
+            <button type="button">칵테일</button>
+            <button type="button">와인</button>
+            <button type="button">푸드</button>
+            <button type="button">시가</button>
+          </nav>
+        </div>
+        <div class="book-browser">
+          <section class="book-category-page">
+            <div class="book-section-head">
+              <div>
+                <span>Selected Category</span>
+                <h4>Whisky</h4>
+              </div>
+              <small>전체 9개</small>
+            </div>
+            <div class="book-menu-grid">
+              <div class="book-subcategory">싱글몰트</div>
+              <article class="book-menu-row">
+                <div>
+                  <strong>맥캘란 12</strong>
+                  <p>셰리 오크, 건과일, 스파이스</p>
+                </div>
+                <b>18,000</b>
+              </article>
+              <article class="book-menu-row">
+                <div>
+                  <strong>맥캘란 18</strong>
+                  <p>말린 과일, 진한 오크, 긴 여운</p>
+                </div>
+                <b>42,000</b>
+              </article>
+              <article class="book-menu-row">
+                <div>
+                  <strong>글렌피딕 15</strong>
+                  <p>꿀, 바닐라, 부드러운 오크</p>
+                </div>
+                <b>21,000</b>
+              </article>
+              <article class="book-menu-row">
+                <div>
+                  <strong>글렌모렌지 10</strong>
+                  <p>시트러스, 바닐라, 가벼운 몰트</p>
+                </div>
+                <b>17,000</b>
+              </article>
+              <article class="book-menu-row">
+                <div>
+                  <strong>발베니 12</strong>
+                  <p>꿀, 견과, 부드러운 피니시</p>
+                </div>
+                <b>22,000</b>
+              </article>
+              <div class="book-subcategory">피티드</div>
+              <article class="book-menu-row">
+                <div>
+                  <strong>아드벡 10</strong>
+                  <p>강한 피트, 레몬, 드라이한 피니시</p>
+                </div>
+                <b>19,000</b>
+              </article>
+              <article class="book-menu-row">
+                <div>
+                  <strong>탈리스커 10</strong>
+                  <p>후추, 바다 내음, 스모키</p>
+                </div>
+                <b>18,000</b>
+              </article>
+              <article class="book-menu-row soldout">
+                <div>
+                  <strong>라프로익 10</strong>
+                  <p>피트, 해조류, 강한 스모키</p>
+                </div>
+                <b>품절</b>
+              </article>
+              <div class="book-subcategory">버번·라이</div>
+              <article class="book-menu-row">
+                <div>
+                  <strong>메이커스 마크</strong>
+                  <p>바닐라, 캐러멜, 부드러운 단맛</p>
+                </div>
+                <b>16,000</b>
+              </article>
+            </div>
+          </section>
+        </div>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

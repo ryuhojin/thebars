@@ -4,6 +4,20 @@ const hexColorSchema = z.string().regex(/^#[0-9A-Fa-f]{6}$/);
 
 export const publicMenuStatusSchema = z.enum(["preparing", "published"]);
 
+export const publicMenuConceptSchema = z.enum(["classic_rail", "speed_list", "curation", "menu_book"]);
+
+export const publicMenuAvailableConceptSchema = z.enum(["menu_book"]);
+
+export const DEFAULT_PUBLIC_MENU_CONCEPT = "menu_book";
+
+export const publicMenuConceptOptions = [
+  {
+    id: "menu_book",
+    label: "메뉴북형",
+    description: "종이 메뉴북처럼 차분하게 카테고리별 메뉴를 읽는 메뉴판입니다."
+  }
+] as const satisfies ReadonlyArray<{ id: z.infer<typeof publicMenuAvailableConceptSchema>; label: string; description: string }>;
+
 export const publicBusinessHourSchema = z.object({
   dayOfWeek: z.number().int().min(0).max(6),
   opensAt: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
@@ -83,6 +97,11 @@ export const publicCategorySchema: z.ZodType<PublicMenuCategory> = z.lazy(() =>
 export const publicMenuSchema = z.object({
   schemaVersion: z.literal(1),
   status: publicMenuStatusSchema,
+  layout: z
+    .object({
+      concept: publicMenuConceptSchema
+    })
+    .default({ concept: DEFAULT_PUBLIC_MENU_CONCEPT }),
   revision: z.number().int().nonnegative(),
   publishedAt: z.string().datetime().nullable(),
   generatedAt: z.string().datetime(),
@@ -103,6 +122,8 @@ export const publicMenuSchema = z.object({
 });
 
 export type PublicMenu = z.infer<typeof publicMenuSchema>;
+export type PublicMenuConcept = z.infer<typeof publicMenuConceptSchema>;
+export type PublicMenuAvailableConcept = z.infer<typeof publicMenuAvailableConceptSchema>;
 export type PublicMenuItem = z.infer<typeof publicMenuItemSchema>;
 export type PublicMenuPrice = z.infer<typeof publicMenuPriceSchema>;
 export type PublicMenuBadge = z.infer<typeof publicMenuBadgeSchema>;

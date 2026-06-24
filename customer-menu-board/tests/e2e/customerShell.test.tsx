@@ -68,16 +68,18 @@ describe("customer menu single route shell", () => {
     render(<CustomerApp />);
 
     await waitFor(() => expect(screen.getByRole("heading", { level: 1, name: "Sample Bar" })).toBeInTheDocument());
-    fireEvent.click(screen.getByRole("button", { name: "바 정보" }));
+    fireEvent.click(screen.getByRole("button", { name: "매장 정보" }));
+    expect(screen.getByRole("dialog", { name: "Sample Bar" })).toBeInTheDocument();
     expect(screen.getByText("02-1234-5678")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "닫기" }));
 
     fireEvent.change(screen.getByLabelText("메뉴 검색"), { target: { value: "House" } });
-    fireEvent.click(screen.getByRole("button", { name: /House Red/ }));
+    fireEvent.click(screen.getByRole("button", { name: "House Red 상세 보기" }));
     setViewport(390, 844);
 
     expect(window.location.pathname).toBe("/YmFyLWE3azJtOQ");
     expect(screen.getByLabelText("메뉴 검색")).toHaveValue("House");
-    expect(screen.getByText("House Red")).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "House Red" })).toBeInTheDocument();
     expect(screen.getByText("생산자")).toBeInTheDocument();
   });
 
@@ -88,7 +90,7 @@ describe("customer menu single route shell", () => {
 
     await screen.findByRole("heading", { level: 1, name: "Sample Bar" });
     fireEvent.change(screen.getByLabelText("메뉴 검색"), { target: { value: "House" } });
-    fireEvent.click(screen.getByRole("button", { name: /House Red/ }));
+    fireEvent.click(screen.getByRole("button", { name: "House Red 상세 보기" }));
 
     vi.useFakeTimers();
     fireEvent.keyDown(window, { key: "H" });
@@ -98,7 +100,7 @@ describe("customer menu single route shell", () => {
 
     expect(window.location.pathname).toBe("/YmFyLWE3azJtOQ");
     expect(screen.getByLabelText("메뉴 검색")).toHaveValue("");
-    expect(screen.getByRole("button", { name: /House Red/ })).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("dialog", { name: "House Red" })).not.toBeInTheDocument();
   });
 
   it("shows not found and schema errors without internal links", async () => {

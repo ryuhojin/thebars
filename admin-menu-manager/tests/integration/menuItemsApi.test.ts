@@ -400,8 +400,35 @@ describe("D11 menu item price, detail, and internal memo API", () => {
       internalMemo: "희소 재고"
     });
     expect(created.prices).toEqual([
-      expect.objectContaining({ label: "샷", volumeText: "30ml", amountMinor: 18000, displayOrder: 0 }),
-      expect.objectContaining({ label: "보틀", volumeText: "700ml", amountMinor: 280000, displayOrder: 1 })
+      expect.objectContaining({ label: "샷", volumeText: "30ml", amountMinor: 18000, displayOrder: 0, isRepresentative: true }),
+      expect.objectContaining({ label: "보틀", volumeText: "700ml", amountMinor: 280000, displayOrder: 1, isRepresentative: false })
+    ]);
+
+    const wine = await createMenuItem(runtime, bar.id, owner.cookie, owner.csrf, {
+      categoryId: whisky.id,
+      name: "부르고뉴 피노",
+      itemType: { source: "system", id: "system-type-wine" },
+      prices: [
+        { label: "글라스", volumeText: "150ml", amountMinor: 18000 },
+        { label: "병", volumeText: "750ml", amountMinor: 120000 }
+      ],
+      details: {
+        template: "wine",
+        producer: "Sample Winery",
+        country: "France",
+        region: "Burgundy",
+        grapeVariety: "Pinot Noir",
+        vintage: "2021",
+        style: "Red",
+        sweetness: "",
+        body: "",
+        acidity: "",
+        tannin: ""
+      }
+    });
+    expect(wine.prices).toEqual([
+      expect.objectContaining({ label: "글라스", isRepresentative: false }),
+      expect.objectContaining({ label: "병", isRepresentative: true })
     ]);
 
     const read = await runtime.app.request(`/api/bars/${bar.id}/menu-items/${created.id}`, { headers: { cookie: manager.cookie } });
@@ -442,7 +469,7 @@ describe("D11 menu item price, detail, and internal memo API", () => {
     );
     expect(managerUpdate.status).toBe(200);
     expect(await readJsonObject(managerUpdate)).toMatchObject({
-      data: { item: { prices: [expect.objectContaining({ label: "글라스", displayOrder: 0 })] } }
+      data: { item: { prices: [expect.objectContaining({ label: "글라스", displayOrder: 0, isRepresentative: true })] } }
     });
 
     const managerMemo = await patchJson(

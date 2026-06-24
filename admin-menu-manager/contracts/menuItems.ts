@@ -36,7 +36,8 @@ export const menuItemPriceSchema = z.object({
   normalizedLabel: z.string().min(1),
   volumeText: menuPriceVolumeTextSchema,
   amountMinor: z.number().int("금액은 정수여야 합니다.").nonnegative("금액은 0 이상이어야 합니다."),
-  displayOrder: z.number().int().nonnegative()
+  displayOrder: z.number().int().nonnegative(),
+  isRepresentative: z.boolean()
 });
 
 export const menuItemPriceInputSchema = z.object({
@@ -44,13 +45,16 @@ export const menuItemPriceInputSchema = z.object({
   label: menuPriceLabelSchema,
   volumeText: menuPriceVolumeTextSchema.optional(),
   amountMinor: z.number().int("금액은 정수여야 합니다.").nonnegative("금액은 0 이상이어야 합니다."),
-  displayOrder: z.number().int().nonnegative().optional()
+  displayOrder: z.number().int().nonnegative().optional(),
+  isRepresentative: z.boolean().optional()
 });
 
 const menuItemPriceInputsSchema = z.array(menuItemPriceInputSchema).max(10, "가격은 최대 10개까지 등록할 수 있습니다.").superRefine((prices, context) => {
   const seen = new Set<string>();
+  let representativeCount = 0;
   prices.forEach((price, index) => {
     const normalized = normalizeMenuPriceLabel(price.label);
+    if (price.isRepresentative) representativeCount += 1;
     if (seen.has(normalized)) {
       context.addIssue({
         code: "custom",
@@ -60,6 +64,13 @@ const menuItemPriceInputsSchema = z.array(menuItemPriceInputSchema).max(10, "가
     }
     seen.add(normalized);
   });
+  if (representativeCount > 1) {
+    context.addIssue({
+      code: "custom",
+      path: ["prices"],
+      message: "대표 가격은 하나만 지정할 수 있습니다."
+    });
+  }
 });
 
 const detailShortTextSchema = z.string().trim().max(80, "상세 정보는 80자 이하여야 합니다.").default("");

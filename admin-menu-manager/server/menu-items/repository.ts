@@ -64,6 +64,7 @@ export type MenuItemPriceRecord = {
   volumeText: string;
   amountMinor: number;
   displayOrder: number;
+  isRepresentative: boolean;
   createdByUserId: string | null;
   updatedByUserId: string | null;
   createdAt: string;
@@ -77,6 +78,7 @@ export type MenuItemPriceInput = {
   volumeText: string;
   amountMinor: number;
   displayOrder: number;
+  isRepresentative?: boolean;
 };
 
 export type MenuItemDetailsRecord = {

@@ -95,6 +95,7 @@ import { createMenuItemRuntime, type MenuItemRuntimeOptions } from "./menu-items
 import { OrderTabService } from "./order-tabs/orderTabService";
 import { createOrderTabRuntime, type OrderTabRuntimeOptions } from "./order-tabs/runtime";
 import { PublicMenuPreviewService } from "./preview/publicMenuPreviewService";
+import { publicMenuPreviewQuerySchema } from "../contracts/preview";
 import { PublicationService, type PublicationMenuBuilder } from "./publications/publicationService";
 import { createPublicationRuntime, type PublicationRuntimeOptions } from "./publications/runtime";
 import { readFoundationSummary } from "./services/foundationService";
@@ -382,6 +383,7 @@ export function createAdminApi(options: AdminApiOptions = {}) {
   app.get("/bars/:barId/preview", async (context) => {
     try {
       const runtime = createAuthRuntime(context.env, options);
+      const query = parseQuery(context, publicMenuPreviewQuerySchema);
       const session = await runtime.service.requireFeatureSession(
         getSessionCookie(context, runtime),
         getCsrfCookie(context, runtime)
@@ -393,7 +395,7 @@ export function createAdminApi(options: AdminApiOptions = {}) {
         createMenuItemRuntime(context.env, options).repository,
         createBadgeRuntime(context.env, options).repository,
         { now: options.now }
-      ).readPreview(session.user, context.req.param("barId"));
+      ).readPreview(session.user, context.req.param("barId"), query.layoutConcept);
       return context.json(ok(data, context.get("requestId")));
     } catch (error) {
       return authErrorResponse(context, error);
@@ -661,7 +663,7 @@ export function createAdminApi(options: AdminApiOptions = {}) {
     try {
       const runtime = createAuthRuntime(context.env, options);
       const session = await runtime.service.requireFeatureSession(getSessionCookie(context, runtime), getCsrfHeader(context));
-      await parseJson(context, publishCurrentMenuRequestSchema);
+      const payload = await parseJson(context, publishCurrentMenuRequestSchema);
       await consumeRateLimit(context, options, "publication.publish", [
         clientFingerprint(context),
         session.user.id,
@@ -669,7 +671,8 @@ export function createAdminApi(options: AdminApiOptions = {}) {
       ]);
       const data = await createPublicationService(context.env, options).publishCurrent(
         session.user,
-        context.req.param("barId")
+        context.req.param("barId"),
+        payload
       );
       return context.json(ok(data, context.get("requestId")), 201);
     } catch (error) {

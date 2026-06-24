@@ -120,6 +120,8 @@ for (const viewport of viewports) {
     await page.getByLabel("품목 유형").selectOption({ label: "위스키 · 공통" });
     await page.getByLabel("ABV").fill("40.5");
     await expect(page.getByLabel("가격 라벨 1")).toHaveValue("샷");
+    await expect(page.getByLabel("대표 가격 1")).toBeChecked();
+    await expect(page.getByLabel("대표 가격 2")).not.toBeChecked();
     await page.getByLabel("가격 금액 1").fill("18000");
     await page.getByLabel("가격 용량 1").fill("30ml");
     await page.getByLabel("가격 금액 2").fill("280000");
@@ -135,6 +137,7 @@ for (const viewport of viewports) {
     await expect(page.getByLabel("메뉴 이름")).toHaveValue(`맥캘란 12 ${viewport.label}`);
     await expect(page.getByLabel("ABV")).toHaveValue("40.5");
     await expect(page.getByLabel("가격 금액 1")).toHaveValue("18000");
+    await expect(page.getByLabel("대표 가격 1")).toBeChecked();
     await expect(page.getByLabel("브랜드·증류소")).toHaveValue("Macallan");
     await expect(page.getByLabel("내부 메모 입력")).toHaveValue("오너 확인 재고");
     await page.setViewportSize({ width: viewport.width, height: viewport.height });
@@ -147,6 +150,7 @@ for (const viewport of viewports) {
     await expect(page).toHaveURL(new RegExp(`/bars/${barId}/menus/[^/]+$`));
     await expect(page.getByRole("heading", { name: "메뉴 기본 정보" })).toBeVisible();
     await expect(page.getByLabel("가격 금액 1")).toHaveValue("18000");
+    await expect(page.getByLabel("대표 가격 1")).toBeChecked();
     await expect(page.getByLabel("브랜드·증류소")).toHaveValue("Macallan");
     await expect(page.getByLabel("내부 메모 입력")).toHaveValue("오너 확인 재고");
     const menuItemId = new URL(page.url()).pathname.split("/").at(-1) ?? "";

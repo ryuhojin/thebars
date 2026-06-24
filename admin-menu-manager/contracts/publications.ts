@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { DEFAULT_PUBLIC_MENU_CONCEPT, publicMenuAvailableConceptSchema } from "./publicMenu";
 
 export const publicationStatusSchema = z.enum([
   "pending",
@@ -40,6 +41,7 @@ export const cloudflareDeploymentStatusSchema = z.enum([
 
 export const publishCurrentMenuRequestSchema = z.object({
   confirmSavedOnly: z.literal(true),
+  layoutConcept: publicMenuAvailableConceptSchema.default(DEFAULT_PUBLIC_MENU_CONCEPT),
   clientMutationId: z.string().trim().max(80).optional()
 });
 
