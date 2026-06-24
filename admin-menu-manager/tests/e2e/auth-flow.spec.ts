@@ -103,4 +103,39 @@ for (const viewport of viewports) {
       fullPage: true
     });
   });
+
+  test(`D01 protected navigation reuses authenticated shell data at ${viewport.label}`, async ({ page }) => {
+    await page.request.post("/__dev/reset-auth");
+    await page.setViewportSize({ width: viewport.width, height: viewport.height });
+    await page.goto("/login");
+
+    await page.getByLabel("아이디").fill("admin1");
+    await page.getByLabel("비밀번호").fill("AdminPass!1");
+    await page.getByRole("button", { name: "로그인" }).click();
+    await expect(page).toHaveURL(/\/dashboard$/);
+    await expect(page.getByRole("heading", { name: "대시보드" })).toBeVisible();
+
+    let sessionRefreshes = 0;
+    let dashboardRefreshes = 0;
+    let permissionRefreshes = 0;
+    page.on("request", (request) => {
+      const url = request.url();
+      if (url.includes("/api/auth/session")) sessionRefreshes += 1;
+      if (url.includes("/api/dashboard")) dashboardRefreshes += 1;
+      if (url.includes("/current-permissions")) permissionRefreshes += 1;
+    });
+
+    await page.evaluate(() => {
+      window.history.pushState(null, "", "/bars");
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    });
+
+    await expect(page).toHaveURL(/\/bars$/);
+    await expect(page.locator(".app-shell")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "로그인 상태 확인 중" })).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: "바 관리" })).toBeVisible();
+    expect(sessionRefreshes).toBe(0);
+    expect(dashboardRefreshes).toBe(0);
+    expect(permissionRefreshes).toBe(0);
+  });
 }

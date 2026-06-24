@@ -123,7 +123,7 @@ function ProtectedRoute({
 
   useEffect(() => {
     let cancelled = false;
-    setState("checking");
+    setState((current) => (current === "ready" ? "ready" : "checking"));
     setMessage("");
     readSession()
       .then((session) => {

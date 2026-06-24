@@ -10,6 +10,12 @@ import type {
 import type { ApiEnvelope } from "../auth/authApi";
 import { AuthApiError } from "../auth/authApi";
 
+const CURRENT_PERMISSIONS_CACHE_TTL_MS = 30_000;
+
+const currentPermissionsCache = new Map<string, { data: CurrentBarPermissionsResponse; loadedAt: number }>();
+const currentPermissionsRequests = new Map<string, Promise<CurrentBarPermissionsResponse>>();
+let currentPermissionsCacheVersion = 0;
+
 export async function readBarMembers(barId: string): Promise<BarMembersResponse> {
   return getJson(`/api/bars/${encodeURIComponent(barId)}/members`);
 }
@@ -18,7 +24,9 @@ export async function addBarMember(
   barId: string,
   payload: AddBarMembershipRequest
 ): Promise<BarMembershipCommandResponse> {
-  return postJson(`/api/bars/${encodeURIComponent(barId)}/members`, payload);
+  const result = await postJson<BarMembershipCommandResponse>(`/api/bars/${encodeURIComponent(barId)}/members`, payload);
+  clearCurrentPermissionsCache(barId);
+  return result;
 }
 
 export async function updateBarMember(
@@ -26,21 +34,36 @@ export async function updateBarMember(
   membershipId: string,
   payload: UpdateBarMembershipRequest
 ): Promise<BarMembershipCommandResponse> {
-  return patchJson(`/api/bars/${encodeURIComponent(barId)}/members/${encodeURIComponent(membershipId)}`, payload);
+  const result = await patchJson<BarMembershipCommandResponse>(
+    `/api/bars/${encodeURIComponent(barId)}/members/${encodeURIComponent(membershipId)}`,
+    payload
+  );
+  clearCurrentPermissionsCache(barId);
+  return result;
 }
 
 export async function deactivateBarMember(
   barId: string,
   membershipId: string
 ): Promise<BarMembershipCommandResponse> {
-  return postJson(`/api/bars/${encodeURIComponent(barId)}/members/${encodeURIComponent(membershipId)}/deactivate`, {});
+  const result = await postJson<BarMembershipCommandResponse>(
+    `/api/bars/${encodeURIComponent(barId)}/members/${encodeURIComponent(membershipId)}/deactivate`,
+    {}
+  );
+  clearCurrentPermissionsCache(barId);
+  return result;
 }
 
 export async function updateRolePermissions(
   barId: string,
   payload: UpdateRolePermissionsRequest
 ): Promise<RolePermissionsResponse> {
-  return patchJson(`/api/bars/${encodeURIComponent(barId)}/role-permissions`, payload);
+  const result = await patchJson<RolePermissionsResponse>(
+    `/api/bars/${encodeURIComponent(barId)}/role-permissions`,
+    payload
+  );
+  clearCurrentPermissionsCache(barId);
+  return result;
 }
 
 export async function readCurrentPermissions(
@@ -48,7 +71,45 @@ export async function readCurrentPermissions(
   required?: string
 ): Promise<CurrentBarPermissionsResponse> {
   const query = required ? `?require=${encodeURIComponent(required)}` : "";
-  return getJson(`/api/bars/${encodeURIComponent(barId)}/current-permissions${query}`);
+  const path = `/api/bars/${encodeURIComponent(barId)}/current-permissions${query}`;
+  const cacheKey = `${barId}:${required ?? ""}`;
+  const cached = currentPermissionsCache.get(cacheKey);
+  if (cached && Date.now() - cached.loadedAt < CURRENT_PERMISSIONS_CACHE_TTL_MS) return cached.data;
+  const pending = currentPermissionsRequests.get(cacheKey);
+  if (pending) return pending;
+
+  const requestVersion = currentPermissionsCacheVersion;
+  const request = getJson<CurrentBarPermissionsResponse>(path)
+    .then((data) => {
+      if (requestVersion === currentPermissionsCacheVersion) {
+        currentPermissionsCache.set(cacheKey, { data, loadedAt: Date.now() });
+      }
+      return data;
+    })
+    .finally(() => {
+      currentPermissionsRequests.delete(cacheKey);
+    });
+  currentPermissionsRequests.set(cacheKey, request);
+  return request;
+}
+
+export function clearCurrentPermissionsCache(barId?: string): void {
+  currentPermissionsCacheVersion += 1;
+  if (!barId) {
+    currentPermissionsCache.clear();
+    currentPermissionsRequests.clear();
+    return;
+  }
+  for (const key of currentPermissionsCache.keys()) {
+    if (key.startsWith(`${barId}:`)) currentPermissionsCache.delete(key);
+  }
+  for (const key of currentPermissionsRequests.keys()) {
+    if (key.startsWith(`${barId}:`)) currentPermissionsRequests.delete(key);
+  }
+}
+
+if (typeof window !== "undefined") {
+  window.addEventListener("thebar:auth-cache-clear", () => clearCurrentPermissionsCache());
 }
 
 async function getJson<T>(path: string): Promise<T> {

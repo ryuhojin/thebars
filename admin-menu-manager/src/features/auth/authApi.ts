@@ -31,6 +31,11 @@ export class AuthApiError extends Error {
   }
 }
 
+const SESSION_CACHE_TTL_MS = 60_000;
+
+let sessionCache: { data: SessionResponse; checkedAt: number } | null = null;
+let sessionRequest: Promise<SessionResponse> | null = null;
+
 export async function setupAdmin(payload: SetupRequest): Promise<{ setupComplete: true; user: AuthUser }> {
   return postJson("/api/setup", payload);
 }
@@ -40,29 +45,57 @@ export async function recoverAdmin(payload: RecoveryRequest): Promise<{ recovere
 }
 
 export async function login(payload: LoginRequest): Promise<LoginResponse> {
+  clearSessionCache();
   const response = await postJson<LoginResponse>("/api/auth/login", payload);
   sessionStorage.setItem("bar_csrf", response.csrfToken);
   return response;
 }
 
-export async function readSession(): Promise<SessionResponse> {
-  const response = await fetch("/api/auth/session", {
+export async function readSession(options: { cache?: "default" | "reload" } = {}): Promise<SessionResponse> {
+  const cacheMode = options.cache ?? "default";
+  if (cacheMode === "default" && sessionCache && Date.now() - sessionCache.checkedAt < SESSION_CACHE_TTL_MS) {
+    return sessionCache.data;
+  }
+  if (cacheMode === "default" && sessionRequest) return sessionRequest;
+
+  sessionRequest = fetch("/api/auth/session", {
     headers: { accept: "application/json" },
     credentials: "include"
-  });
-  const data = await readEnvelope<SessionResponse>(response);
-  sessionStorage.setItem("bar_csrf", data.csrfToken);
-  return data;
+  })
+    .then((response) => readEnvelope<SessionResponse>(response))
+    .then((data) => {
+      sessionStorage.setItem("bar_csrf", data.csrfToken);
+      sessionCache = { data, checkedAt: Date.now() };
+      return data;
+    })
+    .catch((error: unknown) => {
+      clearSessionCache();
+      throw error;
+    })
+    .finally(() => {
+      sessionRequest = null;
+    });
+
+  return sessionRequest;
 }
 
 export async function changePassword(payload: ChangePasswordRequest): Promise<{ passwordChanged: true; user: AuthUser }> {
-  return postJson("/api/auth/change-password", payload, csrfToken());
+  const result = await postJson<{ passwordChanged: true; user: AuthUser }>("/api/auth/change-password", payload, csrfToken());
+  clearSessionCache();
+  return result;
 }
 
 export async function logout(): Promise<{ loggedOut: true }> {
   const result = await postJson<{ loggedOut: true }>("/api/auth/logout", {}, csrfToken());
   sessionStorage.removeItem("bar_csrf");
+  clearSessionCache();
   return result;
+}
+
+export function clearSessionCache(): void {
+  sessionCache = null;
+  sessionRequest = null;
+  if (typeof window !== "undefined") window.dispatchEvent(new Event("thebar:auth-cache-clear"));
 }
 
 async function postJson<T>(path: string, payload: unknown, csrf = ""): Promise<T> {
