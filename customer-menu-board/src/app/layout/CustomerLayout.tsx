@@ -319,8 +319,11 @@ function StatePanel({ state }: { state: CustomerLoadState }) {
   if (state.status === "loading") {
     return <StateBox title="불러오는 중" message="메뉴 JSON을 확인하고 있습니다." tone="info" />;
   }
+  if (state.status === "lookup-required") {
+    return <StateBox title="바를 조회해 주세요" message={state.message} tone="info" />;
+  }
   if (state.status === "not-found") {
-    return <StateBox title="메뉴판을 찾을 수 없습니다" message={state.message} tone="error" />;
+    return <StateBox title="해당 바는 없습니다" message={state.message} tone="error" />;
   }
   if (state.status === "schema-error") {
     return <StateBox title="메뉴 데이터를 표시할 수 없습니다" message={state.message} tone="error" />;

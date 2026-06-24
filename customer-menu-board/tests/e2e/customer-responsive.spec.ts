@@ -213,7 +213,7 @@ for (const viewport of bookViewports) {
 test("D14 customer menu not found and schema states", async ({ page }) => {
   await page.route("**/menus/missing.json", (route) => route.fulfill({ status: 404, body: "{}" }));
   await page.goto("/missing");
-  await expect(page.getByRole("heading", { name: "메뉴판을 찾을 수 없습니다" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "해당 바는 없습니다" })).toBeVisible();
   await expect(page.getByRole("link", { name: /관리자|로그인|주문|결제/ })).toHaveCount(0);
 
   await page.route("**/menus/bad-schema.json", (route) =>
@@ -226,6 +226,21 @@ test("D14 customer menu not found and schema states", async ({ page }) => {
   await page.goto("/bad-schema");
   await expect(page.getByRole("heading", { name: "메뉴 데이터를 표시할 수 없습니다" })).toBeVisible();
   await expect(page.getByRole("link", { name: /관리자|로그인|주문|결제/ })).toHaveCount(0);
+});
+
+test("D14 customer root asks for a bar slug without loading sample data", async ({ page }) => {
+  const menuRequests: string[] = [];
+  page.on("request", (request) => {
+    if (request.url().includes("/menus/")) menuRequests.push(request.url());
+  });
+
+  await page.goto("/");
+
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByRole("heading", { name: "바를 조회해 주세요" })).toBeVisible();
+  await expect(page.getByText("주소에 매장 메뉴판 링크를 입력해 주세요.")).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "Sample Bar" })).toHaveCount(0);
+  expect(menuRequests).toHaveLength(0);
 });
 
 test("D23 customer menu Web Vitals baseline and viewport fetch stability", async ({ page }) => {

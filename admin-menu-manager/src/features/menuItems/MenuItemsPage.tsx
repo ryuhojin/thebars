@@ -1490,7 +1490,7 @@ function groupItemsByCategory(items: MenuItem[]): Array<{ categoryId: string; ca
     group.items.push(item);
     groups.set(item.categoryId, group);
   }
-  return [...groups.values()].sort((left, right) => left.categoryPath.localeCompare(right.categoryPath, "ko"));
+  return [...groups.values()];
 }
 
 function bulkFormToDraft(form: BulkForm): MenuListDraft {

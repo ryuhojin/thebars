@@ -99,6 +99,27 @@ function visibleMenuName(page: Page, name: string, width: number) {
   return (width < 768 ? page.locator(".data-cards") : page.locator(".data-table")).getByText(name).first();
 }
 
+test("menu category select follows the managed category order", async ({ page }) => {
+  await page.request.post("/__dev/reset-auth");
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page, "admin1", "AdminPass!1");
+  const barId = await createBarThroughUi(page, "Category Select Order Bar");
+
+  await page.goto(`/bars/${barId}/categories`);
+  await createRootCategory(page, "Z Order");
+  await createChildCategory(page, "Z Order", "C Child");
+  await createChildCategory(page, "Z Order", "B Child");
+  await createRootCategory(page, "A Order");
+
+  await page.goto(`/bars/${barId}/menus/new`);
+  await expect(page.getByRole("heading", { name: "새 메뉴 등록" })).toBeVisible();
+  const optionLabels = await page.locator('select[aria-label="메뉴 카테고리"] option').evaluateAll((options) =>
+    options.map((option) => option.textContent?.trim() ?? "")
+  );
+
+  expect(optionLabels).toEqual(["Z Order (상위 카테고리)", "Z Order / C Child", "Z Order / B Child", "A Order"]);
+});
+
 for (const viewport of viewports) {
   test(`D11 menu price detail memo save at ${viewport.label}`, async ({ page }, testInfo) => {
     await page.request.post("/__dev/reset-auth");

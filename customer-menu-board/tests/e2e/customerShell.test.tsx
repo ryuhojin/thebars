@@ -60,6 +60,19 @@ function mockFetch(body: unknown, status = 200) {
 }
 
 describe("customer menu single route shell", () => {
+  it("does not fall back to a sample bar when the URL has no slug", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    window.history.pushState(null, "", "/");
+
+    render(<CustomerApp />);
+
+    expect(await screen.findByRole("heading", { name: "바를 조회해 주세요" })).toBeInTheDocument();
+    expect(screen.getByText("주소에 매장 메뉴판 링크를 입력해 주세요.")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { level: 1, name: "Sample Bar" })).not.toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("loads public JSON and preserves search and expanded state during resize", async () => {
     mockFetch(menuFixture);
     window.history.pushState(null, "", "/YmFyLWE3azJtOQ");
@@ -107,7 +120,7 @@ describe("customer menu single route shell", () => {
     mockFetch({}, 404);
     window.history.pushState(null, "", "/missing");
     render(<CustomerApp />);
-    expect(await screen.findByRole("heading", { name: "메뉴판을 찾을 수 없습니다" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "해당 바는 없습니다" })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /관리자|로그인|주문|결제/ })).not.toBeInTheDocument();
   });
 

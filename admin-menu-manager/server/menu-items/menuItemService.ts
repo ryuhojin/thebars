@@ -273,9 +273,11 @@ export class MenuItemService {
     ]);
     const categoryOptions = toCategoryOptions(categories);
     const categoryPathById = new Map(categoryOptions.map((category) => [category.id, category.path]));
+    const categoryOrderById = new Map(categoryOptions.map((category, index) => [category.id, index]));
     const sortedItems = items.sort(
       (left, right) =>
-        (categoryPathById.get(left.categoryId) ?? "").localeCompare(categoryPathById.get(right.categoryId) ?? "", "ko") ||
+        (categoryOrderById.get(left.categoryId) ?? Number.MAX_SAFE_INTEGER) -
+          (categoryOrderById.get(right.categoryId) ?? Number.MAX_SAFE_INTEGER) ||
         left.sortOrder - right.sortOrder ||
         left.name.localeCompare(right.name, "ko")
     );
@@ -534,22 +536,41 @@ export class MenuItemService {
 
 function toCategoryOptions(categories: CategoryRecord[]): MenuCategoryOption[] {
   const byId = new Map(categories.map((category) => [category.id, category]));
-  return categories
-    .map((category) => ({
-      id: category.id,
-      parentId: category.parentId,
-      name: category.name,
-      path: categoryPath(category, byId),
-      isLeaf: category.childCount === 0,
-      isVisible: category.isVisible
-    }))
-    .sort((left, right) => left.path.localeCompare(right.path, "ko"));
+  const childrenByParent = new Map<string, CategoryRecord[]>();
+  for (const category of categories) {
+    const parentKey = category.parentId && byId.has(category.parentId) ? category.parentId : "";
+    const children = childrenByParent.get(parentKey) ?? [];
+    children.push(category);
+    childrenByParent.set(parentKey, children);
+  }
+
+  const ordered: CategoryRecord[] = [];
+  const visit = (siblings: CategoryRecord[]) => {
+    for (const category of sortCategorySiblings(siblings)) {
+      ordered.push(category);
+      visit(childrenByParent.get(category.id) ?? []);
+    }
+  };
+  visit(childrenByParent.get("") ?? []);
+
+  return ordered.map((category) => ({
+    id: category.id,
+    parentId: category.parentId,
+    name: category.name,
+    path: categoryPath(category, byId),
+    isLeaf: category.childCount === 0,
+    isVisible: category.isVisible
+  }));
 }
 
 function categoryPath(category: CategoryRecord, byId: Map<string, CategoryRecord>): string {
   if (!category.parentId) return category.name;
   const parent = byId.get(category.parentId);
   return parent ? `${parent.name} / ${category.name}` : category.name;
+}
+
+function sortCategorySiblings(categories: CategoryRecord[]): CategoryRecord[] {
+  return [...categories].sort((left, right) => left.sortOrder - right.sortOrder || left.name.localeCompare(right.name, "ko"));
 }
 
 function toSystemTypeOption(type: ItemTypeRecord, override?: BarItemTypeOverrideRecord): MenuItemTypeOption {

@@ -9,6 +9,7 @@ const IDLE_RESET_MS = 5 * 60 * 1000;
 
 export type CustomerLoadState =
   | { status: "loading" }
+  | { status: "lookup-required"; message: string }
   | { status: "not-found"; message: string }
   | { status: "schema-error"; message: string }
   | { status: "error"; message: string }
@@ -24,6 +25,17 @@ export function CustomerApp() {
 
   useEffect(() => {
     let cancelled = false;
+    if (!encodedSlug) {
+      setState({ status: "lookup-required", message: "주소에 매장 메뉴판 링크를 입력해 주세요." });
+      setQuery("");
+      setSelectedCategory(null);
+      setExpandedItemId(null);
+      setIsInfoExpanded(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
     setState({ status: "loading" });
     setQuery("");
     setSelectedCategory(null);
@@ -84,7 +96,7 @@ export function CustomerApp() {
 
   return (
     <CustomerLayout
-      encodedSlug={encodedSlug}
+      encodedSlug={encodedSlug ?? ""}
       expandedItemId={expandedItemId}
       isInfoExpanded={isInfoExpanded}
       onInfoExpandedChange={setIsInfoExpanded}
@@ -116,7 +128,7 @@ function getInitialCategoryId(menu: PublicMenu): string | null {
 
 function loadErrorState(error: unknown): CustomerLoadState {
   if (error instanceof PublicMenuFetchError && error.code === "MENU_NOT_FOUND") {
-    return { status: "not-found", message: "메뉴판을 찾을 수 없습니다." };
+    return { status: "not-found", message: "주소를 다시 확인해 주세요." };
   }
   if (
     error instanceof PublicMenuFetchError &&

@@ -26,6 +26,11 @@ type CategoryDto = {
   name: string;
   parentId: string | null;
 };
+type MenuCategoryOptionDto = {
+  id: string;
+  path: string;
+  isLeaf: boolean;
+};
 type MenuItemDto = {
   id: string;
   publicId: string;
@@ -194,6 +199,41 @@ describe("D10 menu item API", () => {
 
     expect(response.status).toBe(401);
     expect(await readJsonObject(response)).toMatchObject({ error: { code: "AUTH_REQUIRED" } });
+  });
+
+  it("returns menu category options in the managed category tree order", async () => {
+    const runtime = createRuntime();
+    await seedUser(runtime, "admin1", { isSystemAdmin: true });
+    const admin = await login(runtime, "admin1", "AdminPass!1");
+    const bar = await createBar(runtime, admin.cookie, admin.csrf, "Category Order Bar");
+    const zRoot = await createCategory(runtime, bar.id, admin.cookie, admin.csrf, { name: "Z Root" });
+    const cChild = await createCategory(runtime, bar.id, admin.cookie, admin.csrf, { name: "C Child", parentId: zRoot.id });
+    const bChild = await createCategory(runtime, bar.id, admin.cookie, admin.csrf, { name: "B Child", parentId: zRoot.id });
+    const aRoot = await createCategory(runtime, bar.id, admin.cookie, admin.csrf, { name: "A Root" });
+
+    const rootReorder = await patchJson(
+      runtime.app,
+      `/api/bars/${bar.id}/categories/reorder`,
+      { parentId: null, orderedIds: [zRoot.id, aRoot.id] },
+      admin.cookie,
+      admin.csrf
+    );
+    expect(rootReorder.status).toBe(200);
+    const childReorder = await patchJson(
+      runtime.app,
+      `/api/bars/${bar.id}/categories/reorder`,
+      { parentId: zRoot.id, orderedIds: [cChild.id, bChild.id] },
+      admin.cookie,
+      admin.csrf
+    );
+    expect(childReorder.status).toBe(200);
+
+    const response = await runtime.app.request(`/api/bars/${bar.id}/menu-items`, { headers: { cookie: admin.cookie } });
+    const body = await readJsonObject(response);
+    expect(response.status).toBe(200);
+
+    const categories = (body.data as { categories: MenuCategoryOptionDto[] }).categories;
+    expect(categories.map((category) => category.path)).toEqual(["Z Root", "Z Root / C Child", "Z Root / B Child", "A Root"]);
   });
 
   it("creates, updates, moves, and permanently deletes basic menu items", async () => {

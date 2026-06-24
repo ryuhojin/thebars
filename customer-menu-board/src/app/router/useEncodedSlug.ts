@@ -7,9 +7,9 @@ function subscribe(callback: () => void) {
 
 function getSnapshot() {
   const slug = window.location.pathname.replace(/^\/+/, "").split("/")[0];
-  return slug || "YmFyLWE3azJtOQ";
+  return slug || null;
 }
 
 export function useEncodedSlug() {
-  return useSyncExternalStore(subscribe, getSnapshot, () => "YmFyLWE3azJtOQ");
+  return useSyncExternalStore(subscribe, getSnapshot, () => null);
 }
