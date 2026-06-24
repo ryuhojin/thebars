@@ -177,16 +177,11 @@ export class MembershipService {
     role: "system-admin" | "owner" | "manager" | "staff";
     permissions: Omit<RolePermission, "role">;
   }> {
-    const { rolePermissions } = await this.prepareBar(barId);
     if (actor.isSystemAdmin) {
+      await this.requireBarExists(barId);
       return {
         role: "system-admin",
-        permissions: {
-          canEditMenu: true,
-          canManageOrders: true,
-          canAddCustomOrderItem: true,
-          canApplyOrderAdjustment: true
-        }
+        permissions: systemAdminPermissions()
       };
     }
 
@@ -194,6 +189,7 @@ export class MembershipService {
     if (!membership) {
       throw new AuthServiceError(404, "BAR_NOT_FOUND", "바를 찾을 수 없습니다.");
     }
+    const rolePermissions = await this.membershipRepository.readRolePermissions(barId);
     const rolePermission = rolePermissions.find((permission) => permission.role === membership.role);
     if (!rolePermission) {
       throw new AuthServiceError(409, "ROLE_PERMISSION_MISSING", "역할 권한 설정이 없습니다.");
@@ -209,11 +205,16 @@ export class MembershipService {
     };
   }
 
-  private async prepareBar(barId: string): Promise<{ bar: BarRecord; rolePermissions: RolePermissionRecord[] }> {
+  private async requireBarExists(barId: string): Promise<BarRecord> {
     const bar = await this.barRepository.findBarById(barId);
     if (!bar) {
       throw new AuthServiceError(404, "BAR_NOT_FOUND", "바를 찾을 수 없습니다.");
     }
+    return bar;
+  }
+
+  private async prepareBar(barId: string): Promise<{ bar: BarRecord; rolePermissions: RolePermissionRecord[] }> {
+    const bar = await this.requireBarExists(barId);
     const rolePermissions = await this.membershipRepository.ensureDefaultRolePermissions(barId, nowIso(this.now()));
     return { bar, rolePermissions };
   }
@@ -296,6 +297,15 @@ function assertCompleteRolePermissionSet(permissions: RolePermission[]): void {
       throw new AuthServiceError(400, "ROLE_PERMISSION_SET_INVALID", "owner, manager, staff 권한을 모두 포함해야 합니다.");
     }
   }
+}
+
+function systemAdminPermissions(): Omit<RolePermission, "role"> {
+  return {
+    canEditMenu: true,
+    canManageOrders: true,
+    canAddCustomOrderItem: true,
+    canApplyOrderAdjustment: true
+  };
 }
 
 function userStatus(user: ManagedUserRecord, now: string): "active" | "inactive" | "locked" {

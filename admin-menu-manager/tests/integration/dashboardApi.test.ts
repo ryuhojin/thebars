@@ -1,8 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createAdminApi } from "../../server/app";
 import { AuthService } from "../../server/auth/authService";
 import { MemoryAuthRepository } from "../../server/auth/memoryAuthRepository";
 import { FastTestPasswordHasher } from "../../server/auth/passwordHasher";
+import { MemoryBarRepository } from "../../server/bars/memoryBarRepository";
+import { MemoryMembershipRepository } from "../../server/memberships/memoryMembershipRepository";
 
 const config = {
   setupToken: "setup-token",
@@ -12,6 +14,8 @@ const config = {
 type DashboardRuntime = {
   app: ReturnType<typeof createAdminApi>;
   repository: MemoryAuthRepository;
+  barRepository: MemoryBarRepository;
+  membershipRepository: MemoryMembershipRepository;
   service: AuthService;
 };
 
@@ -19,6 +23,8 @@ type JsonObject = Record<string, unknown>;
 
 function createRuntime(): DashboardRuntime {
   const repository = new MemoryAuthRepository();
+  const barRepository = new MemoryBarRepository();
+  const membershipRepository = new MemoryMembershipRepository();
   const hasher = new FastTestPasswordHasher();
   const service = new AuthService(repository, {
     passwordHasher: hasher,
@@ -27,9 +33,13 @@ function createRuntime(): DashboardRuntime {
   });
   return {
     repository,
+    barRepository,
+    membershipRepository,
     service,
     app: createAdminApi({
       repository,
+      barRepository,
+      membershipRepository,
       passwordHasher: hasher,
       config,
       now: () => new Date("2026-06-23T00:00:00.000Z")
@@ -75,6 +85,29 @@ async function seedSystemAdmin(runtime: DashboardRuntime) {
     isSystemAdmin: true,
     forcedPasswordChange: false
   });
+}
+
+async function seedDashboardBar(runtime: DashboardRuntime, userId: string) {
+  const now = "2026-06-23T00:00:00.000Z";
+  const bar = await runtime.barRepository.createBar({
+    id: "bar-dashboard",
+    name: "Sample Bar",
+    slug: "bar-a7k2m9",
+    encodedSlug: "YmFyLWE3azJtOQ",
+    currency: "KRW",
+    settingsDraftHash: "dashboard-fixture",
+    createdByUserId: userId,
+    now
+  });
+  await runtime.membershipRepository.upsertMembership({
+    id: "membership-dashboard",
+    barId: bar.id,
+    userId,
+    role: "manager",
+    createdByUserId: userId,
+    now
+  });
+  return bar;
 }
 
 describe("D02 dashboard API", () => {
@@ -156,5 +189,36 @@ describe("D02 dashboard API", () => {
     expect(data.accessibleBars).toEqual([]);
     expect(data.metrics.map((metric) => metric.id)).not.toContain("users-active");
     expect(data.emptyState.title).toBe("접근 가능한 바가 없습니다.");
+  });
+
+  it("does not read global summaries or duplicate memberships for bar-user dashboard", async () => {
+    const runtime = createRuntime();
+    const staff = await runtime.service.createSeedUser({
+      username: "staff1",
+      password: "StaffPass!1",
+      forcedPasswordChange: false
+    });
+    const bar = await seedDashboardBar(runtime, staff.id);
+    const { cookie } = await login(runtime, "staff1", "StaffPass!1");
+    const userSummarySpy = vi.spyOn(runtime.repository, "readUserStatusSummary");
+    const barSummarySpy = vi.spyOn(runtime.barRepository, "readBarStatusSummary");
+    const membershipSpy = vi.spyOn(runtime.membershipRepository, "listActiveMembershipsForUser");
+    const barLookupSpy = vi.spyOn(runtime.barRepository, "findBarById");
+
+    const response = await runtime.app.request("/api/dashboard", { headers: { cookie } });
+    const body = await readJsonObject(response);
+
+    expect(response.status).toBe(200);
+    expect(body).toMatchObject({
+      data: {
+        mode: "bar-user",
+        selectedBarId: bar.id,
+        accessibleBars: [{ id: bar.id, role: "manager" }]
+      }
+    });
+    expect(userSummarySpy).not.toHaveBeenCalled();
+    expect(barSummarySpy).not.toHaveBeenCalled();
+    expect(membershipSpy).toHaveBeenCalledTimes(1);
+    expect(barLookupSpy).toHaveBeenCalledTimes(1);
   });
 });

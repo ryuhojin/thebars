@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createAdminApi } from "../../server/app";
 import { AuthService } from "../../server/auth/authService";
 import { MemoryAuthRepository } from "../../server/auth/memoryAuthRepository";
@@ -310,6 +310,71 @@ describe("D05 memberships API", () => {
     expect(await readJsonObject(editAllowed)).toMatchObject({ data: { allowed: true, permissions: { canEditMenu: true } } });
     expect(barOverview.status).toBe(200);
     expect(await readJsonObject(barOverview)).toMatchObject({ data: { id: barOne.id, name: "Sample Bar" } });
+  });
+
+  it("returns system-admin current permissions without default role permission repair", async () => {
+    const runtime = createRuntime();
+    await seedSystemAdmin(runtime);
+    const admin = await login(runtime, "admin1", "AdminPass!1");
+    const bar = await createBar(runtime, admin.cookie, admin.csrf, "Sample Bar");
+    const ensureSpy = vi.spyOn(runtime.membershipRepository, "ensureDefaultRolePermissions");
+    const readRoleSpy = vi.spyOn(runtime.membershipRepository, "readRolePermissions");
+
+    const response = await runtime.app.request(`/api/bars/${bar.id}/current-permissions?require=canEditMenu`, {
+      headers: { cookie: admin.cookie }
+    });
+
+    expect(response.status).toBe(200);
+    expect(await readJsonObject(response)).toMatchObject({
+      data: {
+        role: "system-admin",
+        permissions: {
+          canEditMenu: true,
+          canManageOrders: true,
+          canAddCustomOrderItem: true,
+          canApplyOrderAdjustment: true
+        },
+        required: "canEditMenu",
+        allowed: true
+      }
+    });
+    expect(ensureSpy).not.toHaveBeenCalled();
+    expect(readRoleSpy).not.toHaveBeenCalled();
+  });
+
+  it("checks current permissions for bar users without repairing defaults or probing inaccessible bars", async () => {
+    const runtime = createRuntime(["bar-a7k2m9", "bar-f9q2x1"]);
+    await seedSystemAdmin(runtime);
+    const staff = await seedUser(runtime, "staff1");
+    const admin = await login(runtime, "admin1", "AdminPass!1");
+    const barOne = await createBar(runtime, admin.cookie, admin.csrf, "Sample Bar");
+    const barTwo = await createBar(runtime, admin.cookie, admin.csrf, "Other Bar");
+    await postJson(runtime.app, `/api/bars/${barOne.id}/members`, { userId: staff.id, role: "staff" }, admin.cookie, admin.csrf);
+    const staffLogin = await login(runtime, "staff1", "StaffPass!1");
+    const ensureSpy = vi.spyOn(runtime.membershipRepository, "ensureDefaultRolePermissions");
+    const readRoleSpy = vi.spyOn(runtime.membershipRepository, "readRolePermissions");
+    const barLookupSpy = vi.spyOn(runtime.barRepository, "findBarById");
+
+    const ownBar = await runtime.app.request(`/api/bars/${barOne.id}/current-permissions`, {
+      headers: { cookie: staffLogin.cookie }
+    });
+    const otherBar = await runtime.app.request(`/api/bars/${barTwo.id}/current-permissions`, {
+      headers: { cookie: staffLogin.cookie }
+    });
+
+    expect(ownBar.status).toBe(200);
+    expect(await readJsonObject(ownBar)).toMatchObject({
+      data: {
+        role: "staff",
+        permissions: { canEditMenu: false, canManageOrders: true },
+        allowed: true
+      }
+    });
+    expect(otherBar.status).toBe(404);
+    expect(await readJsonObject(otherBar)).toMatchObject({ error: { code: "BAR_NOT_FOUND" } });
+    expect(ensureSpy).not.toHaveBeenCalled();
+    expect(readRoleSpy).toHaveBeenCalledTimes(1);
+    expect(barLookupSpy).not.toHaveBeenCalled();
   });
 
   it("shows accessible bars on the dashboard for active members only", async () => {

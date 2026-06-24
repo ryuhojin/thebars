@@ -15,14 +15,8 @@ export class DashboardService {
 
   async readDashboard(actor: AuthUserRecord, now = new Date()): Promise<DashboardResponse> {
     const mode = actor.isSystemAdmin ? "system-admin" : "bar-user";
-    const [userSummary, barSummary, bars, activeMemberships] = await Promise.all([
-      this.authRepository.readUserStatusSummary(now.toISOString()),
-      this.barRepository?.readBarStatusSummary() ?? Promise.resolve({ totalBars: 0, activeBars: 0, inactiveBars: 0 }),
-      actor.isSystemAdmin && this.barRepository ? this.barRepository.listBars() : this.readActorBars(actor),
-      actor.isSystemAdmin || !this.membershipRepository
-        ? Promise.resolve([])
-        : this.membershipRepository.listActiveMembershipsForUser(actor.id)
-    ]);
+    const dashboardData = actor.isSystemAdmin ? await this.readSystemAdminDashboardData(now) : await this.readBarUserDashboardData(actor);
+    const { userSummary, barSummary, bars, activeMemberships } = dashboardData;
     const roleByBarId = new Map(activeMemberships.map((membership) => [membership.barId, membership.role]));
 
     const response: DashboardResponse = {
@@ -60,12 +54,46 @@ export class DashboardService {
     return dashboardResponseSchema.parse(response);
   }
 
-  private async readActorBars(actor: AuthUserRecord) {
-    if (!this.barRepository || !this.membershipRepository) return [];
-    const memberships = await this.membershipRepository.listActiveMembershipsForUser(actor.id);
-    const bars = await Promise.all(memberships.map((membership) => this.barRepository?.findBarById(membership.barId)));
-    return bars.filter((bar): bar is NonNullable<typeof bar> => bar !== null && bar !== undefined);
+  private async readSystemAdminDashboardData(now: Date) {
+    const [userSummary, barSummary, bars] = await Promise.all([
+      this.authRepository.readUserStatusSummary(now.toISOString()),
+      this.barRepository?.readBarStatusSummary() ?? Promise.resolve({ totalBars: 0, activeBars: 0, inactiveBars: 0 }),
+      this.barRepository?.listBars() ?? Promise.resolve([])
+    ]);
+    return { userSummary, barSummary, bars, activeMemberships: [] };
   }
+
+  private async readBarUserDashboardData(actor: AuthUserRecord) {
+    if (!this.barRepository || !this.membershipRepository) {
+      return {
+        userSummary: emptyUserSummary(),
+        barSummary: emptyBarSummary(),
+        bars: [],
+        activeMemberships: []
+      };
+    }
+    const activeMemberships = await this.membershipRepository.listActiveMembershipsForUser(actor.id);
+    const bars = await Promise.all(activeMemberships.map((membership) => this.barRepository?.findBarById(membership.barId)));
+    return {
+      userSummary: emptyUserSummary(),
+      barSummary: emptyBarSummary(),
+      bars: bars.filter((bar): bar is NonNullable<typeof bar> => bar !== null && bar !== undefined),
+      activeMemberships
+    };
+  }
+}
+
+function emptyUserSummary() {
+  return {
+    totalUsers: 0,
+    activeUsers: 0,
+    inactiveUsers: 0,
+    lockedUsers: 0
+  };
+}
+
+function emptyBarSummary(): BarStatusSummary {
+  return { totalBars: 0, activeBars: 0, inactiveBars: 0 };
 }
 
 function systemAdminMetrics(
