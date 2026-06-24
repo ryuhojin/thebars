@@ -23,12 +23,17 @@ const PublicationsPage = lazy(() => import("../../features/publications/Publicat
 const SystemUsersPage = lazy(() => import("../../features/systemUsers/SystemUsersPage").then((module) => ({ default: module.SystemUsersPage })));
 
 export function AdminApp() {
-  const pathname = useBrowserPath();
+  const rawPathname = useBrowserPath();
+  const pathname = rawPathname === "/" ? "/dashboard" : rawPathname;
   const route = useMemo(() => matchAdminRoute(pathname), [pathname]);
   const navigate = useCallback((path: string) => {
     window.history.pushState(null, "", path);
     window.dispatchEvent(new PopStateEvent("popstate"));
   }, []);
+
+  useEffect(() => {
+    if (rawPathname === "/") replacePath("/dashboard");
+  }, [rawPathname]);
 
   if (["/setup", "/login", "/change-password", "/recovery"].includes(pathname)) {
     return <AuthRoutePage pathname={pathname} navigate={navigate} />;

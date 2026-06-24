@@ -28,6 +28,11 @@ for (const viewport of viewports) {
     await expect(page.getByRole("heading", { name: "로그인" })).toBeVisible();
     await expect(page.getByText("반응형 앱 셸 검증")).toHaveCount(0);
 
+    await page.goto("/");
+    await expect(page).toHaveURL(/\/login$/);
+    await expect(page.getByRole("heading", { name: "로그인" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "화면을 찾을 수 없습니다" })).toHaveCount(0);
+
     await page.goto("/change-password");
     await expect(page).toHaveURL(/\/login$/);
     await expect(page.getByRole("heading", { name: "로그인" })).toBeVisible();
@@ -35,8 +40,11 @@ for (const viewport of viewports) {
 
     await page.goto("/login");
     await expect(page.getByRole("button", { name: "관리자 복구" })).toHaveCount(0);
+    await expect(page.locator('head link[rel="icon"][href="/favicon.svg"]')).toHaveCount(1);
     await expect(page.getByText("CSRF")).toHaveCount(0);
     await expect(page.getByText(/운영 보안을 먼저/)).toHaveCount(0);
+    const faviconResponse = await page.request.get("/favicon.svg");
+    expect(faviconResponse.status()).toBe(200);
     if (viewport.width >= 768) {
       await expect(page.getByRole("heading", { name: "바 운영을 위한 관리자 콘솔" })).toBeVisible();
       await expect(page.getByText("오늘 주문")).toBeVisible();
@@ -137,5 +145,22 @@ for (const viewport of viewports) {
     expect(sessionRefreshes).toBe(0);
     expect(dashboardRefreshes).toBe(0);
     expect(permissionRefreshes).toBe(0);
+  });
+
+  test(`D01 direct root opens the dashboard for an authenticated session at ${viewport.label}`, async ({ page }) => {
+    await page.request.post("/__dev/reset-auth");
+    await page.setViewportSize({ width: viewport.width, height: viewport.height });
+    await page.goto("/login");
+
+    await page.getByLabel("아이디").fill("admin1");
+    await page.getByLabel("비밀번호").fill("AdminPass!1");
+    await page.getByRole("button", { name: "로그인" }).click();
+    await expect(page).toHaveURL(/\/dashboard$/);
+
+    await page.goto("/");
+    await expect(page).toHaveURL(/\/dashboard$/);
+    await expect(page.getByRole("heading", { name: "대시보드" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "화면을 찾을 수 없습니다" })).toHaveCount(0);
+    await expect(page.locator(".app-shell")).toHaveAttribute("data-route", "/dashboard");
   });
 }

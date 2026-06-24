@@ -1,0 +1,5 @@
+/favicon.svg
+  Cache-Control: public, max-age=604800, immutable
+
+/favicon.ico
+  Cache-Control: public, max-age=604800, immutable
