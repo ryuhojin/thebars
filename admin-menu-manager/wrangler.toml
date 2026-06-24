@@ -4,6 +4,18 @@ pages_build_output_dir = "dist"
 
 [[d1_databases]]
 binding = "DB"
-database_name = "bar-menu-operations-local"
-database_id = "00000000-0000-0000-0000-000000000000"
+database_name = "thebar-preview"
+database_id = "d852d5b8-a93e-4468-93f2-0083529bc68d"
+migrations_dir = "db/migrations"
+
+[[env.preview.d1_databases]]
+binding = "DB"
+database_name = "thebar-preview"
+database_id = "d852d5b8-a93e-4468-93f2-0083529bc68d"
+migrations_dir = "db/migrations"
+
+[[env.production.d1_databases]]
+binding = "DB"
+database_name = "thebar-production"
+database_id = "407c68f2-a7c1-446d-8b9e-7b3be312bf4c"
 migrations_dir = "db/migrations"
