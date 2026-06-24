@@ -1,0 +1,94 @@
+.page-stack {
+  display: grid;
+  gap: 18px;
+}
+
+.eyebrow {
+  margin: 0 0 6px;
+  color: var(--color-accent);
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.button,
+.icon-button {
+  min-height: 44px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  color: var(--color-text);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 14px;
+  font: inherit;
+  font-weight: 700;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.icon-button {
+  width: 44px;
+  padding: 0;
+}
+
+.button.primary {
+  border-color: var(--color-accent);
+  background: var(--color-accent);
+  color: #ffffff;
+}
+
+.button.secondary {
+  background: var(--color-surface-muted);
+}
+
+.button.danger {
+  border-color: var(--color-danger);
+  background: var(--color-danger);
+  color: #ffffff;
+}
+
+.button.compact {
+  min-height: 44px;
+  padding: 0 10px;
+}
+
+.field {
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+  color: var(--color-muted);
+  font-weight: 700;
+}
+
+.field input,
+.field select,
+.field textarea,
+.readonly-field {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 0 12px;
+  color: var(--color-text);
+  font: inherit;
+}
+
+.field select,
+.field textarea {
+  background: var(--color-surface);
+}
+
+.field textarea {
+  padding-block: 10px;
+}
+
+.readonly-field {
+  background: var(--color-surface-muted);
+  display: inline-flex;
+  align-items: center;
+  font-weight: 700;
+}

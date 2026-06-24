@@ -1,0 +1,1963 @@
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
+import type {
+  BulkMenuItemChange,
+  BulkUpdateMenuItemsRequest,
+  CreateMenuItemRequest,
+  MenuBadgeOption,
+  MenuBadgeSelection,
+  MenuItem,
+  MenuItemBadge,
+  MenuItemDetail,
+  MenuItemDetails,
+  MenuItemPriceInput,
+  MenuItemsResponse,
+  MenuItemTypeOption,
+  MenuItemTypeSelection,
+  UpdateMenuItemRequest
+} from "../../../contracts/menuItems";
+import { AuthApiError } from "../auth/authApi";
+import { useDirtyWarning } from "../auth/useDirtyWarning";
+import { bulkUpdateMenuItems, createMenuItem, deleteMenuItem, readMenuItem, readMenuItems, updateMenuItem } from "./menuItemsApi";
+
+type Navigate = (path: string) => void;
+type FieldErrors = Record<string, string[]>;
+type SaveState = "idle" | "saving" | "error";
+type LoadState<T> =
+  | { status: "loading" }
+  | { status: "ready"; data: T }
+  | { status: "unauthenticated"; message: string }
+  | { status: "forbidden"; message: string }
+  | { status: "error"; message: string };
+
+type MenuForm = {
+  categoryId: string;
+  name: string;
+  description: string;
+  saleStatus: "available" | "sold_out";
+  isVisible: boolean;
+  abv: string;
+  itemTypeKey: string;
+  prices: PriceForm[];
+  details: MenuItemDetails;
+  internalMemo: string;
+  confirmDetailReset: boolean;
+};
+
+type PriceForm = {
+  localId: string;
+  label: string;
+  volumeText: string;
+  amountMinor: string;
+};
+
+type EditorMode = "creating" | "editing";
+type ListMode = "all" | "category";
+type BulkSaveState = "idle" | "saving" | "error" | "success";
+type MenuListDraft = Omit<BulkMenuItemChange, "menuItemId">;
+type BadgeMode = "keep" | "replace" | "clear";
+type BulkForm = {
+  saleStatus: "keep" | "available" | "sold_out";
+  visibility: "keep" | "visible" | "hidden";
+  categoryId: "keep" | string;
+  badgeMode: BadgeMode;
+  badges: MenuBadgeSelection[];
+};
+
+export function MenuItemsPage({ barId, navigate }: { barId: string; navigate: Navigate }) {
+  const [state, setState] = useState<LoadState<MenuItemsResponse>>({ status: "loading" });
+  const [reloadKey, setReloadKey] = useState(0);
+  const [query, setQuery] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [itemTypeFilter, setItemTypeFilter] = useState("all");
+  const [saleFilter, setSaleFilter] = useState<"all" | "available" | "sold_out">("all");
+  const [visibilityFilter, setVisibilityFilter] = useState<"all" | "visible" | "hidden">("all");
+  const [badgeFilter, setBadgeFilter] = useState("all");
+  const [listMode, setListMode] = useState<ListMode>("all");
+  const [selectedId, setSelectedId] = useState("");
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  const [drafts, setDrafts] = useState<Record<string, MenuListDraft>>({});
+  const [bulkForm, setBulkForm] = useState<BulkForm>({
+    saleStatus: "keep",
+    visibility: "keep",
+    categoryId: "keep",
+    badgeMode: "keep",
+    badges: []
+  });
+  const [bulkMessage, setBulkMessage] = useState("");
+  const [saveState, setSaveState] = useState<BulkSaveState>("idle");
+  const draftCount = Object.keys(drafts).length;
+  useDirtyWarning(draftCount > 0 && saveState !== "saving");
+
+  useEffect(() => {
+    let cancelled = false;
+    setState({ status: "loading" });
+    readMenuItems(barId)
+      .then((data) => {
+        if (cancelled) return;
+        const itemIds = new Set(data.items.map((item) => item.id));
+        setSelectedId((current) => (data.items.some((item) => item.id === current) ? current : data.items[0]?.id ?? ""));
+        setSelectedIds((current) => new Set([...current].filter((id) => itemIds.has(id))));
+        setDrafts((current) => {
+          const next: Record<string, MenuListDraft> = {};
+          for (const [id, draft] of Object.entries(current)) {
+            if (itemIds.has(id)) next[id] = draft;
+          }
+          return next;
+        });
+        setState({ status: "ready", data });
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) setState(toLoadError(error));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [barId, reloadKey]);
+
+  if (state.status !== "ready") return <MenuStatusState state={state} navigate={navigate} />;
+
+  const canEdit = state.data.canEdit;
+  const leafCategories = state.data.categories.filter((category) => category.isLeaf);
+  const effectiveItems = state.data.items.map((item) => applyMenuDraft(item, drafts[item.id], state.data.categories, state.data.badgeOptions));
+  const filteredItems = effectiveItems.filter((item) =>
+    menuMatchesFilters(item, { query, categoryFilter, itemTypeFilter, saleFilter, visibilityFilter, badgeFilter })
+  );
+  const categoryGroups = groupItemsByCategory(filteredItems);
+  const selectedItem = effectiveItems.find((item) => item.id === selectedId) ?? null;
+  const selectedFilteredCount = filteredItems.filter((item) => selectedIds.has(item.id)).length;
+  const allFilteredSelected = filteredItems.length > 0 && selectedFilteredCount === filteredItems.length;
+  const saveDisabled = !canEdit || draftCount === 0 || saveState === "saving";
+
+  const updateDraft = (menuItemId: string, patch: MenuListDraft) => {
+    const source = state.data.items.find((item) => item.id === menuItemId);
+    if (!source) return;
+    setDrafts((current) => withMenuDraft(current, source, patch));
+    setSaveState("idle");
+    setBulkMessage("미저장 변경사항이 있습니다. 최종 저장을 눌러 반영하세요.");
+  };
+
+  const toggleSelected = (menuItemId: string, checked: boolean) => {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (checked) next.add(menuItemId);
+      else next.delete(menuItemId);
+      return next;
+    });
+  };
+
+  const toggleAllFiltered = (checked: boolean) => {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      filteredItems.forEach((item) => {
+        if (checked) next.add(item.id);
+        else next.delete(item.id);
+      });
+      return next;
+    });
+  };
+
+  const moveItem = (menuItemId: string, direction: -1 | 1) => {
+    const item = effectiveItems.find((entry) => entry.id === menuItemId);
+    if (!item) return;
+    const siblings = effectiveItems
+      .filter((entry) => entry.categoryId === item.categoryId)
+      .sort((left, right) => left.sortOrder - right.sortOrder || left.name.localeCompare(right.name, "ko"));
+    const index = siblings.findIndex((entry) => entry.id === menuItemId);
+    const target = siblings[index + direction];
+    if (index < 0 || !target) return;
+    updateDraft(item.id, { sortOrder: target.sortOrder });
+    updateDraft(target.id, { sortOrder: item.sortOrder });
+  };
+
+  const applyBulkDraft = () => {
+    const targetIds = [...selectedIds].filter((id) => state.data.items.some((item) => item.id === id));
+    if (!targetIds.length) {
+      setSaveState("error");
+      setBulkMessage("변경할 메뉴를 선택하세요.");
+      return;
+    }
+    const patch = bulkFormToDraft(bulkForm);
+    if (Object.keys(patch).length === 0) {
+      setSaveState("error");
+      setBulkMessage("선택한 메뉴에 적용할 변경 항목을 고르세요.");
+      return;
+    }
+    setDrafts((current) => {
+      let next = current;
+      for (const id of targetIds) {
+        const source = state.data.items.find((item) => item.id === id);
+        if (source) next = withMenuDraft(next, source, patch);
+      }
+      return next;
+    });
+    setSaveState("idle");
+    setBulkMessage(`${targetIds.length}개 메뉴에 일괄 변경 초안을 적용했습니다. 최종 저장을 눌러 반영하세요.`);
+  };
+
+  const revertDrafts = () => {
+    setDrafts({});
+    setBulkMessage("");
+    setSaveState("idle");
+  };
+
+  const saveDrafts = () => {
+    const changes = toBulkChanges(drafts);
+    if (!changes.length) return;
+    const payload: BulkUpdateMenuItemsRequest = {
+      expectedCount: changes.length,
+      changes
+    };
+    setSaveState("saving");
+    setBulkMessage("");
+    bulkUpdateMenuItems(barId, payload)
+      .then((data) => {
+        setState({ status: "ready", data });
+        setDrafts({});
+        setSelectedIds(new Set());
+        setSaveState("success");
+        setBulkMessage(`${data.bulk.impactCount}개 메뉴를 저장했습니다.`);
+      })
+      .catch((error: unknown) => {
+        setSaveState("error");
+        setBulkMessage(error instanceof AuthApiError || error instanceof Error ? error.message : "일괄 변경을 저장하지 못했습니다.");
+      });
+  };
+
+  const clearFilters = () => {
+    setQuery("");
+    setCategoryFilter("all");
+    setItemTypeFilter("all");
+    setSaleFilter("all");
+    setVisibilityFilter("all");
+    setBadgeFilter("all");
+  };
+
+  return (
+    <div className="menus-page">
+      <section className="hero-panel" aria-labelledby="menus-title">
+        <div>
+          <p className="eyebrow">메뉴 운영</p>
+          <h1 id="menus-title">메뉴 관리</h1>
+          <p>{state.data.bar.name}의 메뉴 목록, 배지, 판매 상태, 노출, 순서를 같은 URL에서 관리합니다.</p>
+        </div>
+        <div className="status-box" role="status">
+          <span>등록 메뉴</span>
+          <strong>{state.data.items.length}개</strong>
+          <small>필터 결과 {filteredItems.length}개 · 미저장 {draftCount}개</small>
+          <button className="button secondary compact" type="button" onClick={() => setReloadKey((value) => value + 1)}>
+            새로고침
+          </button>
+        </div>
+      </section>
+
+      <section className="panel" aria-labelledby="menu-list-title">
+        <div className="section-heading menus-toolbar">
+          <div>
+            <p className="eyebrow">메뉴 목록</p>
+            <h2 id="menu-list-title">메뉴 목록</h2>
+          </div>
+          <div className="table-actions">
+            <button className="button secondary" type="button" onClick={clearFilters}>
+              필터 초기화
+            </button>
+            <button className="button secondary" type="button" onClick={() => navigate(`/bars/${barId}/publications`)}>
+              발행
+            </button>
+            <button className="button primary" type="button" disabled={!canEdit} onClick={() => navigate(`/bars/${barId}/menus/new`)}>
+              메뉴 등록
+            </button>
+          </div>
+        </div>
+
+        <nav className="menus-view-tabs" aria-label="메뉴 목록 보기">
+          <button className={listMode === "all" ? "is-active" : ""} type="button" onClick={() => setListMode("all")}>
+            전체 목록
+          </button>
+          <button className={listMode === "category" ? "is-active" : ""} type="button" onClick={() => setListMode("category")}>
+            카테고리 보기
+          </button>
+        </nav>
+
+        <div className="menu-filter-grid">
+          <label className="field">
+            <span>메뉴 검색</span>
+            <input
+              aria-label="메뉴 검색"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="이름, 설명, 카테고리"
+            />
+          </label>
+          <label className="field">
+            <span>카테고리 필터</span>
+            <select aria-label="카테고리 필터" value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}>
+              <option value="all">전체 카테고리</option>
+              {state.data.categories.map((category) => (
+                <option key={category.id} value={category.id}>
+                  {category.path}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="field">
+            <span>품목 유형 필터</span>
+            <select aria-label="품목 유형 필터" value={itemTypeFilter} onChange={(event) => setItemTypeFilter(event.target.value)}>
+              <option value="all">전체 유형</option>
+              {state.data.itemTypes.map((type) => (
+                <option key={`${type.source}:${type.id}`} value={`${type.source}:${type.id}`}>
+                  {type.name} · {type.source === "system" ? "공통" : "바 전용"}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="field">
+            <span>판매 상태 필터</span>
+            <select
+              aria-label="판매 상태 필터"
+              value={saleFilter}
+              onChange={(event) => setSaleFilter(event.target.value as "all" | "available" | "sold_out")}
+            >
+              <option value="all">전체 상태</option>
+              <option value="available">판매 중</option>
+              <option value="sold_out">품절</option>
+            </select>
+          </label>
+          <label className="field">
+            <span>노출 필터</span>
+            <select
+              aria-label="노출 필터"
+              value={visibilityFilter}
+              onChange={(event) => setVisibilityFilter(event.target.value as "all" | "visible" | "hidden")}
+            >
+              <option value="all">전체 노출</option>
+              <option value="visible">노출</option>
+              <option value="hidden">숨김</option>
+            </select>
+          </label>
+          <label className="field">
+            <span>배지 필터</span>
+            <select aria-label="배지 필터" value={badgeFilter} onChange={(event) => setBadgeFilter(event.target.value)}>
+              <option value="all">전체 배지</option>
+              {state.data.badgeOptions.map((badge) => (
+                <option key={`${badge.source}:${badge.id}`} value={`${badge.source}:${badge.id}`}>
+                  {badge.name} · {badge.source === "system" ? "공통" : "바 전용"}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        {state.data.items.length === 0 ? (
+          <div className="dashboard-empty" role="status">
+            <strong>등록된 메뉴가 없습니다.</strong>
+            <p>leaf 카테고리를 만든 뒤 첫 메뉴를 등록하세요.</p>
+            <div className="table-actions">
+              <button className="button secondary" type="button" onClick={() => navigate(`/bars/${barId}/categories`)}>
+                카테고리 관리
+              </button>
+              <button
+                className="button primary"
+                type="button"
+                disabled={!state.data.canEdit}
+                onClick={() => navigate(`/bars/${barId}/menus/new`)}
+              >
+                메뉴 등록
+              </button>
+            </div>
+          </div>
+        ) : filteredItems.length === 0 ? (
+          <div className="dashboard-empty" role="status">
+            <strong>조건에 맞는 메뉴가 없습니다.</strong>
+            <p>검색어 또는 필터를 조정하세요.</p>
+          </div>
+        ) : (
+          <>
+            <MenuBulkPanel
+              canEdit={canEdit}
+              selectedCount={selectedIds.size}
+              draftCount={draftCount}
+              categories={leafCategories}
+              badgeOptions={state.data.badgeOptions}
+              form={bulkForm}
+              message={bulkMessage}
+              saveState={saveState}
+              saveDisabled={saveDisabled}
+              onChange={setBulkForm}
+              onApply={applyBulkDraft}
+              onSave={saveDrafts}
+              onRevert={revertDrafts}
+            />
+            {listMode === "category" ? (
+              <div className="category-menu-groups" aria-label="카테고리별 메뉴 목록">
+                {categoryGroups.map((group) => (
+                  <section className="category-menu-group" key={group.categoryId} aria-labelledby={`category-group-${group.categoryId}`}>
+                    <div className="category-menu-heading">
+                      <h3 id={`category-group-${group.categoryId}`}>{group.categoryPath}</h3>
+                      <span className="status-badge">{group.items.length}개</span>
+                    </div>
+                    <MenuItemsDataView
+                      items={group.items}
+                      activeId={selectedId}
+                      selectedIds={selectedIds}
+                      allFilteredSelected={allFilteredSelected}
+                      canEdit={canEdit}
+                      categories={leafCategories}
+                      badgeOptions={state.data.badgeOptions}
+                      onSelect={setSelectedId}
+                      onToggleSelected={toggleSelected}
+                      onToggleAll={toggleAllFiltered}
+                      onDraft={updateDraft}
+                      onMove={moveItem}
+                      onOpen={(menuItemId) => navigate(`/bars/${barId}/menus/${menuItemId}`)}
+                    />
+                  </section>
+                ))}
+              </div>
+            ) : (
+              <MenuItemsDataView
+                items={filteredItems}
+                activeId={selectedId}
+                selectedIds={selectedIds}
+                allFilteredSelected={allFilteredSelected}
+                canEdit={canEdit}
+                categories={leafCategories}
+                badgeOptions={state.data.badgeOptions}
+                onSelect={setSelectedId}
+                onToggleSelected={toggleSelected}
+                onToggleAll={toggleAllFiltered}
+                onDraft={updateDraft}
+                onMove={moveItem}
+                onOpen={(menuItemId) => navigate(`/bars/${barId}/menus/${menuItemId}`)}
+              />
+            )}
+            <div className="selected-bar-summary" role="status">
+              현재 행: {selectedItem?.name ?? "없음"} · 화면 선택 {selectedFilteredCount}개 / 전체 선택 {selectedIds.size}개
+            </div>
+          </>
+        )}
+      </section>
+    </div>
+  );
+}
+
+export function MenuItemEditorPage({
+  barId,
+  menuItemId,
+  navigate
+}: {
+  barId: string;
+  menuItemId?: string;
+  navigate: Navigate;
+}) {
+  const mode: EditorMode = menuItemId ? "editing" : "creating";
+  const [state, setState] = useState<LoadState<MenuItemsResponse & { item?: MenuItemDetail | null }>>({ status: "loading" });
+  const [form, setForm] = useState<MenuForm>(emptyMenuForm());
+  const [original, setOriginal] = useState<MenuForm>(emptyMenuForm());
+  const [errors, setErrors] = useState<FieldErrors>({});
+  const [message, setMessage] = useState("");
+  const [status, setStatus] = useState<SaveState>("idle");
+  const [draggingPriceIndex, setDraggingPriceIndex] = useState<number | null>(null);
+  const dirty = JSON.stringify(form) !== JSON.stringify(original);
+  useDirtyWarning(dirty && status !== "saving");
+
+  useEffect(() => {
+    let cancelled = false;
+    setState({ status: "loading" });
+    const request = menuItemId ? readMenuItem(barId, menuItemId) : readMenuItems(barId);
+    request
+      .then((data) => {
+        if (cancelled) return;
+        const nextForm = menuItemId
+          ? menuToForm((data as MenuItemsResponse & { item: MenuItemDetail | null }).item)
+          : emptyMenuForm(data.categories.find((category) => category.isLeaf)?.id ?? "");
+        setForm(nextForm);
+        setOriginal(nextForm);
+        setErrors({});
+        setMessage("");
+        setStatus("idle");
+        setState({ status: "ready", data });
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) setState(toLoadError(error));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [barId, menuItemId]);
+
+  if (state.status !== "ready") return <MenuStatusState state={state} navigate={navigate} />;
+
+  const leafCategories = state.data.categories.filter((category) => category.isLeaf);
+  const canEdit = state.data.canEdit;
+  const canEditInternalMemo = state.data.canEditInternalMemo ?? state.data.canEdit;
+  const heading = mode === "creating" ? "새 메뉴 등록" : "메뉴 기본 정보";
+  const selectedItem = "item" in state.data ? state.data.item ?? null : null;
+  const selectedType = state.data.itemTypes.find((type) => `${type.source}:${type.id}` === form.itemTypeKey) ?? null;
+  const selectedTemplate = selectedType?.template ?? "general";
+  const templateResetRequired = original.details.template !== selectedTemplate && detailsHasContent(original.details);
+
+  if (mode === "creating" && !canEdit) {
+    return <MenuStatus title="접근할 수 없습니다" message="이 바에서 메뉴를 편집할 권한이 없습니다." tone="error" />;
+  }
+
+  const save = (event: FormEvent) => {
+    event.preventDefault();
+    const payload = formToPayload(form, canEditInternalMemo);
+    if ("errors" in payload) {
+      setErrors(payload.errors);
+      setMessage("입력값을 확인하세요.");
+      setStatus("error");
+      return;
+    }
+    setStatus("saving");
+    setErrors({});
+    setMessage("");
+    const request =
+      mode === "creating"
+        ? createMenuItem(barId, payload.value as CreateMenuItemRequest)
+        : updateMenuItem(barId, menuItemId ?? "", payload.value as UpdateMenuItemRequest);
+    request
+      .then((data) => {
+        const nextItem = data.item;
+        if (!nextItem) throw new Error("저장한 메뉴를 찾을 수 없습니다.");
+        const nextForm = menuToForm(nextItem);
+        setForm(nextForm);
+        setOriginal(nextForm);
+        setState({ status: "ready", data });
+        setStatus("idle");
+        setMessage("메뉴를 저장했습니다.");
+        if (mode === "creating") navigate(`/bars/${barId}/menus/${nextItem.id}`);
+      })
+      .catch((error: unknown) => handleFormError(error, setErrors, setMessage, setStatus));
+  };
+
+  const remove = () => {
+    if (!menuItemId || !window.confirm("이 메뉴를 영구 삭제할까요?")) return;
+    setStatus("saving");
+    setErrors({});
+    setMessage("");
+    deleteMenuItem(barId, menuItemId)
+      .then(() => navigate(`/bars/${barId}/menus`))
+      .catch((error: unknown) => handleFormError(error, setErrors, setMessage, setStatus));
+  };
+
+  const revert = () => {
+    setForm(original);
+    setErrors({});
+    setMessage("");
+    setStatus("idle");
+  };
+
+  const changeItemType = (value: string) => {
+    const nextType = state.data.itemTypes.find((type) => `${type.source}:${type.id}` === value) ?? null;
+    const nextTemplate = nextType?.template ?? "general";
+    setForm((current) => ({
+      ...current,
+      itemTypeKey: value,
+      prices:
+        current.prices.length === 0 && nextType?.defaultPriceLabels.length
+          ? nextType.defaultPriceLabels.map((label) => ({ localId: nextLocalId(), label, volumeText: "", amountMinor: "" }))
+          : current.prices,
+      details: current.details.template === nextTemplate ? current.details : defaultDetails(nextTemplate),
+      confirmDetailReset: false
+    }));
+  };
+
+  const updatePrice = (index: number, patch: Partial<PriceForm>) => {
+    setForm((current) => ({
+      ...current,
+      prices: current.prices.map((price, itemIndex) => (itemIndex === index ? { ...price, ...patch } : price))
+    }));
+  };
+
+  const movePrice = (from: number, to: number) => {
+    setForm((current) => ({ ...current, prices: moveArrayItem(current.prices, from, to) }));
+  };
+
+  const updateDetailValue = (field: string, value: string | boolean) => {
+    setForm((current) => ({ ...current, details: { ...current.details, [field]: value } as MenuItemDetails }));
+  };
+
+  return (
+    <form className="menu-editor-page" onSubmit={save} noValidate>
+      <section className="hero-panel" aria-labelledby="menu-editor-title">
+        <div>
+          <p className="eyebrow">메뉴 편집</p>
+          <h1 id="menu-editor-title">{heading}</h1>
+          <p>{state.data.bar.name}의 기본 정보, 가격, 상세 템플릿, 내부 메모를 같은 화면에서 저장합니다.</p>
+        </div>
+        <div className="status-box" role="status">
+          <span>저장 상태</span>
+          <strong>{mode === "creating" ? "신규 메뉴" : "기존 메뉴 편집"}</strong>
+          <small>{selectedItem?.publicId ? "공개 메뉴 식별자 연결됨" : "저장 전"}</small>
+        </div>
+      </section>
+
+      {!leafCategories.length ? (
+        <section className="panel" aria-labelledby="menu-no-category-title">
+          <div className="dashboard-empty" role="status">
+            <strong id="menu-no-category-title">메뉴를 담을 leaf 카테고리가 없습니다.</strong>
+            <p>하위 카테고리가 없는 카테고리를 먼저 생성하세요.</p>
+            <button className="button primary" type="button" onClick={() => navigate(`/bars/${barId}/categories`)}>
+              카테고리 관리
+            </button>
+          </div>
+        </section>
+      ) : (
+        <>
+        <section className="panel menu-editor-panel" aria-labelledby="menu-basic-title">
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow">기본 정보</p>
+              <h2 id="menu-basic-title">기본 정보</h2>
+            </div>
+            <span className={dirty ? "status-badge locked" : "status-badge active"}>{dirty ? "수정 중" : "저장됨"}</span>
+          </div>
+
+          {Object.keys(errors).length > 0 ? (
+            <div className="form-summary" role="alert">
+              입력값을 확인하세요.
+            </div>
+          ) : null}
+          {message ? <div className={`form-status ${status === "idle" ? "success" : ""}`} role="alert">{message}</div> : null}
+
+          <div className="menu-editor-grid">
+            <label className="field">
+              <span>메뉴 이름</span>
+              <input
+                aria-label="메뉴 이름"
+                value={form.name}
+                disabled={!canEdit}
+                aria-invalid={errors.name?.length ? "true" : undefined}
+                onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
+                placeholder="예: 맥캘란 12"
+              />
+              {errors.name?.length ? <strong className="field-error">{errors.name[0]}</strong> : null}
+            </label>
+            <label className="field">
+              <span>카테고리</span>
+              <select
+                aria-label="메뉴 카테고리"
+                value={form.categoryId}
+                disabled={!canEdit}
+                aria-invalid={errors.categoryId?.length ? "true" : undefined}
+                onChange={(event) => setForm((current) => ({ ...current, categoryId: event.target.value }))}
+              >
+                {state.data.categories.map((category) => (
+                  <option key={category.id} value={category.id} disabled={!category.isLeaf}>
+                    {category.path}{category.isLeaf ? "" : " (상위 카테고리)"}
+                  </option>
+                ))}
+              </select>
+              {errors.categoryId?.length ? <strong className="field-error">{errors.categoryId[0]}</strong> : null}
+            </label>
+            <label className="field full">
+              <span>메뉴 설명</span>
+              <textarea
+                aria-label="메뉴 설명"
+                value={form.description}
+                disabled={!canEdit}
+                maxLength={200}
+                aria-invalid={errors.description?.length ? "true" : undefined}
+                onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))}
+                placeholder="최대 200자"
+              />
+              {errors.description?.length ? <strong className="field-error">{errors.description[0]}</strong> : null}
+            </label>
+            <label className="field">
+              <span>품목 유형</span>
+              <select
+                aria-label="품목 유형"
+                value={form.itemTypeKey}
+                disabled={!canEdit}
+                onChange={(event) => changeItemType(event.target.value)}
+              >
+                <option value="none">선택 안 함</option>
+                {state.data.itemTypes.map((type) => (
+                  <option key={`${type.source}:${type.id}`} value={`${type.source}:${type.id}`}>
+                    {type.name} · {type.source === "system" ? "공통" : "바 전용"}
+                  </option>
+                ))}
+              </select>
+              {errors.itemType?.length ? <strong className="field-error">{errors.itemType[0]}</strong> : null}
+            </label>
+            <label className="field">
+              <span>ABV</span>
+              <input
+                aria-label="ABV"
+                inputMode="decimal"
+                value={form.abv}
+                disabled={!canEdit}
+                aria-invalid={errors.abv?.length ? "true" : undefined}
+                onChange={(event) => setForm((current) => ({ ...current, abv: event.target.value }))}
+                placeholder="예: 40.5"
+              />
+              {errors.abv?.length ? <strong className="field-error">{errors.abv[0]}</strong> : null}
+            </label>
+          </div>
+
+          <div className="menu-status-grid" aria-label="판매와 노출 상태">
+            <fieldset className="segmented-field" disabled={!canEdit}>
+              <legend>판매 상태</legend>
+              <label>
+                <input
+                  type="radio"
+                  name="saleStatus"
+                  value="available"
+                  checked={form.saleStatus === "available"}
+                  onChange={() => setForm((current) => ({ ...current, saleStatus: "available" }))}
+                />
+                판매 중
+              </label>
+              <label>
+                <input
+                  type="radio"
+                  name="saleStatus"
+                  value="sold_out"
+                  checked={form.saleStatus === "sold_out"}
+                  onChange={() => setForm((current) => ({ ...current, saleStatus: "sold_out" }))}
+                />
+                품절
+              </label>
+            </fieldset>
+            <label className="check-row menu-visible-toggle">
+              <input
+                aria-label="메뉴 노출"
+                type="checkbox"
+                checked={form.isVisible}
+                disabled={!canEdit}
+                onChange={(event) => setForm((current) => ({ ...current, isVisible: event.target.checked }))}
+              />
+              고객 메뉴판에 노출
+            </label>
+          </div>
+        </section>
+        <section className="panel menu-editor-panel" aria-labelledby="menu-prices-title">
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow">가격 옵션</p>
+              <h2 id="menu-prices-title">가격</h2>
+            </div>
+            <button
+              className="button secondary compact"
+              type="button"
+              disabled={!canEdit || form.prices.length >= 10}
+              onClick={() =>
+                setForm((current) => ({
+                  ...current,
+                  prices: [...current.prices, { localId: nextLocalId(), label: "", volumeText: "", amountMinor: "" }]
+                }))
+              }
+            >
+              가격 추가
+            </button>
+          </div>
+          {errors.prices?.length ? <div className="form-summary" role="alert">{errors.prices[0]}</div> : null}
+          {form.prices.length === 0 ? (
+            <div className="dashboard-empty" role="status">
+              <strong>등록된 가격이 없습니다.</strong>
+              <p>가격이 없는 메뉴는 고객 메뉴판에서 가격 영역이 숨겨집니다.</p>
+            </div>
+          ) : (
+            <div className="menu-price-list" aria-label="가격 목록">
+              {form.prices.map((price, index) => (
+                <div
+                  className="menu-price-row"
+                  key={price.localId}
+                  draggable={canEdit}
+                  onDragStart={() => setDraggingPriceIndex(index)}
+                  onDragOver={(event) => event.preventDefault()}
+                  onDrop={() => {
+                    if (draggingPriceIndex !== null) movePrice(draggingPriceIndex, index);
+                    setDraggingPriceIndex(null);
+                  }}
+                >
+                  <span className="price-row-handle" aria-hidden="true">↕</span>
+                  <label className="field">
+                    <span>가격 라벨</span>
+                    <input
+                      aria-label={`가격 라벨 ${index + 1}`}
+                      value={price.label}
+                      disabled={!canEdit}
+                      onChange={(event) => updatePrice(index, { label: event.target.value })}
+                      placeholder="샷"
+                    />
+                  </label>
+                  <label className="field">
+                    <span>용량</span>
+                    <input
+                      aria-label={`가격 용량 ${index + 1}`}
+                      value={price.volumeText}
+                      disabled={!canEdit}
+                      onChange={(event) => updatePrice(index, { volumeText: event.target.value })}
+                      placeholder="30ml"
+                    />
+                  </label>
+                  <label className="field">
+                    <span>금액</span>
+                    <input
+                      aria-label={`가격 금액 ${index + 1}`}
+                      inputMode="numeric"
+                      value={price.amountMinor}
+                      disabled={!canEdit}
+                      onChange={(event) => updatePrice(index, { amountMinor: event.target.value })}
+                      placeholder="18000"
+                    />
+                  </label>
+                  <div className="price-row-actions">
+                    <button className="icon-button" type="button" disabled={!canEdit || index === 0} onClick={() => movePrice(index, index - 1)} aria-label={`가격 ${index + 1} 위로`}>
+                      ↑
+                    </button>
+                    <button
+                      className="icon-button"
+                      type="button"
+                      disabled={!canEdit || index === form.prices.length - 1}
+                      onClick={() => movePrice(index, index + 1)}
+                      aria-label={`가격 ${index + 1} 아래로`}
+                    >
+                      ↓
+                    </button>
+                    <button
+                      className="icon-button danger"
+                      type="button"
+                      disabled={!canEdit}
+                      onClick={() => setForm((current) => ({ ...current, prices: current.prices.filter((_, itemIndex) => itemIndex !== index) }))}
+                      aria-label={`가격 ${index + 1} 삭제`}
+                    >
+                      ×
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <section className="panel menu-editor-panel" aria-labelledby="menu-details-title">
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow">상세 정보</p>
+              <h2 id="menu-details-title">상세 정보</h2>
+            </div>
+            <span className="status-badge">{templateLabel(selectedTemplate)}</span>
+          </div>
+          {templateResetRequired ? (
+            <label className="check-row detail-reset-warning">
+              <input
+                type="checkbox"
+                checked={form.confirmDetailReset}
+                disabled={!canEdit}
+                onChange={(event) => setForm((current) => ({ ...current, confirmDetailReset: event.target.checked }))}
+              />
+              유형 변경으로 기존 상세 정보를 삭제하고 저장
+            </label>
+          ) : null}
+          {selectedTemplate === "general" ? (
+            <div className="dashboard-empty" role="status">
+              <strong>선택된 상세 템플릿이 없습니다.</strong>
+              <p>품목 유형을 선택하면 해당 유형의 상세 입력 항목이 표시됩니다.</p>
+            </div>
+          ) : (
+            <DetailFields details={form.details} disabled={!canEdit} onChange={updateDetailValue} />
+          )}
+        </section>
+
+        <section className="panel menu-editor-panel" aria-labelledby="menu-memo-title">
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow">관리자 메모</p>
+              <h2 id="menu-memo-title">내부 메모</h2>
+            </div>
+            <span className={canEditInternalMemo ? "status-badge active" : "status-badge locked"}>
+              {canEditInternalMemo ? "수정 가능" : "읽기 전용"}
+            </span>
+          </div>
+          <label className="field full">
+            <span>메모 내용</span>
+            <textarea
+              aria-label="내부 메모 입력"
+              value={form.internalMemo}
+              disabled={!canEditInternalMemo}
+              maxLength={2000}
+              onChange={(event) => setForm((current) => ({ ...current, internalMemo: event.target.value }))}
+              placeholder="고객 메뉴판에 공개되지 않는 운영 메모"
+            />
+            {errors.internalMemo?.length ? <strong className="field-error">{errors.internalMemo[0]}</strong> : null}
+          </label>
+        </section>
+        </>
+      )}
+
+      <div className="sticky-action-bar">
+        <button className="button secondary" type="button" onClick={() => confirmDiscard(dirty, () => navigate(`/bars/${barId}/menus`))}>
+          목록
+        </button>
+        <div className="menu-sticky-actions">
+          {mode === "editing" ? (
+            <button className="button secondary" type="button" disabled={!canEdit || status === "saving"} onClick={remove}>
+              메뉴 삭제
+            </button>
+          ) : null}
+          <button className="button secondary" type="button" disabled={!dirty || status === "saving"} onClick={revert}>
+            되돌리기
+          </button>
+          <button className="button primary" type="submit" disabled={!canEdit || !dirty || status === "saving" || !leafCategories.length}>
+            {status === "saving" ? "저장 중" : "저장"}
+          </button>
+        </div>
+      </div>
+    </form>
+  );
+}
+
+function MenuItemsDataView({
+  items,
+  activeId,
+  selectedIds,
+  allFilteredSelected,
+  canEdit,
+  categories,
+  badgeOptions,
+  onSelect,
+  onToggleSelected,
+  onToggleAll,
+  onDraft,
+  onMove,
+  onOpen
+}: {
+  items: MenuItem[];
+  activeId: string;
+  selectedIds: Set<string>;
+  allFilteredSelected: boolean;
+  canEdit: boolean;
+  categories: Array<{ id: string; path: string }>;
+  badgeOptions: MenuBadgeOption[];
+  onSelect: (id: string) => void;
+  onToggleSelected: (id: string, checked: boolean) => void;
+  onToggleAll: (checked: boolean) => void;
+  onDraft: (id: string, patch: MenuListDraft) => void;
+  onMove: (id: string, direction: -1 | 1) => void;
+  onOpen: (id: string) => void;
+}) {
+  return (
+    <div className="menus-data-view" aria-label="메뉴 목록">
+      <table className="data-table menus-table">
+        <thead>
+          <tr>
+            <th scope="col">
+              <label className="control-hitbox" aria-label="화면 메뉴 전체 선택">
+                <input
+                  aria-label="화면 메뉴 전체 선택"
+                  type="checkbox"
+                  checked={allFilteredSelected}
+                  disabled={!canEdit || items.length === 0}
+                  onChange={(event) => onToggleAll(event.target.checked)}
+                />
+              </label>
+            </th>
+            <th scope="col">메뉴</th>
+            <th scope="col">카테고리</th>
+            <th scope="col">가격</th>
+            <th scope="col">배지</th>
+            <th scope="col">상태</th>
+            <th scope="col">노출</th>
+            <th scope="col">품목 유형</th>
+            <th scope="col">수정</th>
+            <th scope="col">작업</th>
+          </tr>
+        </thead>
+        <tbody>
+          {items.map((item, index) => (
+            <tr key={item.id} data-selected={item.id === activeId} data-dirty={hasMenuDraftMarker(item)}>
+              <td>
+                <label className="control-hitbox" aria-label={`${item.name} 선택`}>
+                  <input
+                    aria-label={`${item.name} 선택`}
+                    type="checkbox"
+                    checked={selectedIds.has(item.id)}
+                    disabled={!canEdit}
+                    onChange={(event) => onToggleSelected(item.id, event.target.checked)}
+                  />
+                </label>
+              </td>
+              <td>
+                <strong>{item.name}</strong>
+                <small>{item.publicId} · {item.description || "설명 없음"}</small>
+              </td>
+              <td>
+                <select
+                  aria-label={`${item.name} 카테고리 빠른 변경`}
+                  value={item.categoryId}
+                  disabled={!canEdit}
+                  onChange={(event) => onDraft(item.id, { categoryId: event.target.value })}
+                >
+                  {categories.map((category) => (
+                    <option key={category.id} value={category.id}>
+                      {category.path}
+                    </option>
+                  ))}
+                </select>
+              </td>
+              <td>{formatPrices(item)}</td>
+              <td>
+                <BadgeSelectionEditor
+                  label={`${item.name} 배지`}
+                  selected={item.badges}
+                  options={badgeOptions}
+                  disabled={!canEdit}
+                  onChange={(badges) => onDraft(item.id, { badges })}
+                />
+                {item.saleStatus === "sold_out" && item.badges.length ? <small>품절 공개 JSON에서는 배지 숨김</small> : null}
+              </td>
+              <td>
+                <select
+                  aria-label={`${item.name} 판매 상태 빠른 변경`}
+                  value={item.saleStatus}
+                  disabled={!canEdit}
+                  onChange={(event) => onDraft(item.id, { saleStatus: event.target.value as "available" | "sold_out" })}
+                >
+                  <option value="available">판매 중</option>
+                  <option value="sold_out">품절</option>
+                </select>
+              </td>
+              <td>
+                <label className="inline-switch">
+                  <input
+                    aria-label={`${item.name} 노출 빠른 변경`}
+                    type="checkbox"
+                    checked={item.isVisible}
+                    disabled={!canEdit}
+                    onChange={(event) => onDraft(item.id, { isVisible: event.target.checked })}
+                  />
+                  {item.isVisible ? "노출" : "숨김"}
+                </label>
+              </td>
+              <td>{item.itemType?.name ?? "선택 안 함"}</td>
+              <td>
+                <small>{item.updatedByUsername}</small>
+                <small>{formatDateTime(item.updatedAt)}</small>
+              </td>
+              <td>
+                <div className="table-actions">
+                  <button className="icon-button" type="button" disabled={!canEdit || index === 0} onClick={() => onMove(item.id, -1)} aria-label={`${item.name} 위로 이동`}>
+                    ↑
+                  </button>
+                  <button
+                    className="icon-button"
+                    type="button"
+                    disabled={!canEdit || index === items.length - 1}
+                    onClick={() => onMove(item.id, 1)}
+                    aria-label={`${item.name} 아래로 이동`}
+                  >
+                    ↓
+                  </button>
+                  <button className="button compact" type="button" onClick={() => onSelect(item.id)}>
+                    선택
+                  </button>
+                  <button className="button compact secondary" type="button" onClick={() => onOpen(item.id)}>
+                    상세
+                  </button>
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      <div className="data-cards">
+        {items.map((item, index) => (
+          <article className="data-card menu-card-summary" key={item.id} data-selected={item.id === activeId} data-dirty={hasMenuDraftMarker(item)}>
+            <div>
+              <label className="check-row menu-card-check">
+                <input
+                  aria-label={`${item.name} 선택`}
+                  type="checkbox"
+                  checked={selectedIds.has(item.id)}
+                  disabled={!canEdit}
+                  onChange={(event) => onToggleSelected(item.id, event.target.checked)}
+                />
+                <strong>{item.name}</strong>
+              </label>
+              <span>{item.publicId} · {item.categoryPath}</span>
+            </div>
+            <div className="card-row">
+              <span>가격</span>
+              <strong>{formatPrices(item)}</strong>
+            </div>
+            <label className="field">
+              <span>카테고리</span>
+              <select
+                aria-label={`${item.name} 카테고리 빠른 변경`}
+                value={item.categoryId}
+                disabled={!canEdit}
+                onChange={(event) => onDraft(item.id, { categoryId: event.target.value })}
+              >
+                {categories.map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {category.path}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="field">
+              <span>상태</span>
+              <select
+                aria-label={`${item.name} 판매 상태 빠른 변경`}
+                value={item.saleStatus}
+                disabled={!canEdit}
+                onChange={(event) => onDraft(item.id, { saleStatus: event.target.value as "available" | "sold_out" })}
+              >
+                <option value="available">판매 중</option>
+                <option value="sold_out">품절</option>
+              </select>
+            </label>
+            <label className="check-row">
+              <input
+                aria-label={`${item.name} 노출 빠른 변경`}
+                type="checkbox"
+                checked={item.isVisible}
+                disabled={!canEdit}
+                onChange={(event) => onDraft(item.id, { isVisible: event.target.checked })}
+              />
+              {item.isVisible ? "고객 메뉴판에 노출" : "고객 메뉴판에서 숨김"}
+            </label>
+            <div className="card-row">
+              <span>품목 유형</span>
+              <strong>{item.itemType?.name ?? "선택 안 함"}</strong>
+            </div>
+            <BadgeSelectionEditor
+              label={`${item.name} 배지`}
+              selected={item.badges}
+              options={badgeOptions}
+              disabled={!canEdit}
+              onChange={(badges) => onDraft(item.id, { badges })}
+            />
+            {item.saleStatus === "sold_out" && item.badges.length ? <p className="muted">품절 공개 JSON에서는 배지가 숨겨집니다.</p> : null}
+            <div className="card-actions">
+              <button className="icon-button" type="button" disabled={!canEdit || index === 0} onClick={() => onMove(item.id, -1)} aria-label={`${item.name} 위로 이동`}>
+                ↑
+              </button>
+              <button
+                className="icon-button"
+                type="button"
+                disabled={!canEdit || index === items.length - 1}
+                onClick={() => onMove(item.id, 1)}
+                aria-label={`${item.name} 아래로 이동`}
+              >
+                ↓
+              </button>
+              <button className="button secondary" type="button" onClick={() => onSelect(item.id)}>
+                선택
+              </button>
+              <button className="button primary" type="button" onClick={() => onOpen(item.id)}>
+                상세
+              </button>
+            </div>
+          </article>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function MenuBulkPanel({
+  canEdit,
+  selectedCount,
+  draftCount,
+  categories,
+  badgeOptions,
+  form,
+  message,
+  saveState,
+  saveDisabled,
+  onChange,
+  onApply,
+  onSave,
+  onRevert
+}: {
+  canEdit: boolean;
+  selectedCount: number;
+  draftCount: number;
+  categories: Array<{ id: string; path: string }>;
+  badgeOptions: MenuBadgeOption[];
+  form: BulkForm;
+  message: string;
+  saveState: BulkSaveState;
+  saveDisabled: boolean;
+  onChange: (form: BulkForm) => void;
+  onApply: () => void;
+  onSave: () => void;
+  onRevert: () => void;
+}) {
+  const bulkBadges = form.badgeMode === "replace" ? form.badges : [];
+  return (
+    <div className="menu-bulk-panel" data-active={selectedCount > 0 || draftCount > 0} aria-label="메뉴 일괄 수정">
+      <div className="menu-bulk-summary">
+        <strong>선택 {selectedCount}개</strong>
+        <span>미저장 변경 {draftCount}개</span>
+        <span>{canEdit ? "최종 저장 전 화면에만 적용" : "읽기 전용"}</span>
+      </div>
+      <div className="menu-bulk-grid">
+        <label className="field">
+          <span>판매 상태</span>
+          <select
+            aria-label="일괄 판매 상태"
+            value={form.saleStatus}
+            disabled={!canEdit}
+            onChange={(event) => onChange({ ...form, saleStatus: event.target.value as BulkForm["saleStatus"] })}
+          >
+            <option value="keep">유지</option>
+            <option value="available">판매 중</option>
+            <option value="sold_out">품절</option>
+          </select>
+        </label>
+        <label className="field">
+          <span>노출</span>
+          <select
+            aria-label="일괄 노출"
+            value={form.visibility}
+            disabled={!canEdit}
+            onChange={(event) => onChange({ ...form, visibility: event.target.value as BulkForm["visibility"] })}
+          >
+            <option value="keep">유지</option>
+            <option value="visible">노출</option>
+            <option value="hidden">숨김</option>
+          </select>
+        </label>
+        <label className="field">
+          <span>카테고리 이동</span>
+          <select
+            aria-label="일괄 카테고리 이동"
+            value={form.categoryId}
+            disabled={!canEdit}
+            onChange={(event) => onChange({ ...form, categoryId: event.target.value })}
+          >
+            <option value="keep">유지</option>
+            {categories.map((category) => (
+              <option key={category.id} value={category.id}>
+                {category.path}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="field">
+          <span>배지</span>
+          <select
+            aria-label="일괄 배지 방식"
+            value={form.badgeMode}
+            disabled={!canEdit}
+            onChange={(event) =>
+              onChange({
+                ...form,
+                badgeMode: event.target.value as BadgeMode,
+                badges: event.target.value === "replace" ? form.badges : []
+              })
+            }
+          >
+            <option value="keep">유지</option>
+            <option value="replace">선택 배지로 교체</option>
+            <option value="clear">모두 제거</option>
+          </select>
+        </label>
+      </div>
+      {form.badgeMode === "replace" ? (
+        <BadgeSelectionEditor
+          label="일괄 배지"
+          selected={bulkBadges}
+          options={badgeOptions}
+          disabled={!canEdit}
+          onChange={(badges) => onChange({ ...form, badges })}
+        />
+      ) : null}
+      {message ? <div className={`form-status ${saveState === "success" ? "success" : ""}`} role="alert">{message}</div> : null}
+      <div className="menu-bulk-actions">
+        <button className="button secondary" type="button" disabled={!canEdit || selectedCount === 0} onClick={onApply}>
+          선택 항목에 적용
+        </button>
+        <button className="button secondary" type="button" disabled={draftCount === 0 || saveState === "saving"} onClick={onRevert}>
+          변경 취소
+        </button>
+        <button className="button primary" type="button" disabled={saveDisabled} onClick={onSave}>
+          {saveState === "saving" ? "저장 중" : `최종 저장 ${draftCount ? `${draftCount}개` : ""}`}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function BadgeSelectionEditor({
+  label,
+  selected,
+  options,
+  disabled,
+  onChange
+}: {
+  label: string;
+  selected: MenuBadgeSelection[];
+  options: MenuBadgeOption[];
+  disabled: boolean;
+  onChange: (badges: MenuBadgeSelection[]) => void;
+}) {
+  const [pendingKey, setPendingKey] = useState("");
+  const selectedKeys = new Set(selected.map(badgeKey));
+  const optionByKey = new Map(options.map((option) => [badgeKey(option), option]));
+  const available = options.filter((option) => !selectedKeys.has(badgeKey(option)));
+  const pendingOption = available.find((option) => badgeKey(option) === pendingKey) ?? available[0] ?? null;
+  const addBadge = () => {
+    if (!pendingOption || selected.length >= 3) return;
+    onChange([...selected, { source: pendingOption.source, id: pendingOption.id }]);
+    setPendingKey("");
+  };
+  return (
+    <div className="badge-selection-editor" aria-label={label}>
+      <div className="menu-badge-inline-list">
+        {selected.length ? (
+          selected.map((badge, index) => {
+            const option = optionByKey.get(badgeKey(badge));
+            return (
+              <span className="menu-badge-edit-chip" key={badgeKey(badge)}>
+                <span
+                  className="menu-badge-chip"
+                  style={{ backgroundColor: option?.color.backgroundHex ?? "#666666", color: option?.color.textColor ?? "#FFFFFF" }}
+                >
+                  {option?.name ?? "사용할 수 없는 배지"}
+                </span>
+                <button
+                  className="icon-button"
+                  type="button"
+                  disabled={disabled || index === 0}
+                  onClick={() => onChange(moveArrayItem(selected, index, index - 1))}
+                  aria-label={`${option?.name ?? "배지"} 앞으로 이동`}
+                >
+                  ↑
+                </button>
+                <button
+                  className="icon-button"
+                  type="button"
+                  disabled={disabled || index === selected.length - 1}
+                  onClick={() => onChange(moveArrayItem(selected, index, index + 1))}
+                  aria-label={`${option?.name ?? "배지"} 뒤로 이동`}
+                >
+                  ↓
+                </button>
+                <button
+                  className="icon-button danger"
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => onChange(selected.filter((_, itemIndex) => itemIndex !== index))}
+                  aria-label={`${option?.name ?? "배지"} 제거`}
+                >
+                  ×
+                </button>
+              </span>
+            );
+          })
+        ) : (
+          <span className="muted">배지 없음</span>
+        )}
+      </div>
+      <div className="badge-add-row">
+        <select
+          aria-label={`${label} 추가 선택`}
+          value={pendingOption ? badgeKey(pendingOption) : ""}
+          disabled={disabled || !available.length || selected.length >= 3}
+          onChange={(event) => setPendingKey(event.target.value)}
+        >
+          {available.length ? (
+            available.map((option) => (
+              <option key={badgeKey(option)} value={badgeKey(option)}>
+                {option.name} · {option.source === "system" ? "공통" : "바 전용"}
+              </option>
+            ))
+          ) : (
+            <option value="">추가 가능 배지 없음</option>
+          )}
+        </select>
+        <button className="button compact secondary" type="button" disabled={disabled || !pendingOption || selected.length >= 3} onClick={addBadge}>
+          배지 추가
+        </button>
+      </div>
+    </div>
+  );
+}
+
+type MenuFilterInput = {
+  query: string;
+  categoryFilter: string;
+  itemTypeFilter: string;
+  saleFilter: "all" | "available" | "sold_out";
+  visibilityFilter: "all" | "visible" | "hidden";
+  badgeFilter: string;
+};
+
+type MenuItemWithDraft = MenuItem & {
+  __hasDraft?: boolean;
+};
+
+function applyMenuDraft(
+  item: MenuItem,
+  draft: MenuListDraft | undefined,
+  categories: MenuItemsResponse["categories"],
+  badgeOptions: MenuBadgeOption[]
+): MenuItemWithDraft {
+  if (!draft) return item;
+  const category = draft.categoryId ? categories.find((entry) => entry.id === draft.categoryId) : null;
+  return {
+    ...item,
+    categoryId: draft.categoryId ?? item.categoryId,
+    categoryPath: category?.path ?? item.categoryPath,
+    saleStatus: draft.saleStatus ?? item.saleStatus,
+    isVisible: draft.isVisible ?? item.isVisible,
+    sortOrder: draft.sortOrder ?? item.sortOrder,
+    badges: draft.badges ? draft.badges.map((badge, index) => toMenuItemBadge(badge, index, badgeOptions)) : item.badges,
+    __hasDraft: true
+  };
+}
+
+function withMenuDraft(current: Record<string, MenuListDraft>, item: MenuItem, patch: MenuListDraft): Record<string, MenuListDraft> {
+  const merged = normalizeDraft(item, { ...(current[item.id] ?? {}), ...patch });
+  const next = { ...current };
+  if (Object.keys(merged).length === 0) delete next[item.id];
+  else next[item.id] = merged;
+  return next;
+}
+
+function normalizeDraft(item: MenuItem, draft: MenuListDraft): MenuListDraft {
+  const next: MenuListDraft = {};
+  if (draft.saleStatus !== undefined && draft.saleStatus !== item.saleStatus) next.saleStatus = draft.saleStatus;
+  if (draft.isVisible !== undefined && draft.isVisible !== item.isVisible) next.isVisible = draft.isVisible;
+  if (draft.categoryId !== undefined && draft.categoryId !== item.categoryId) next.categoryId = draft.categoryId;
+  if (draft.sortOrder !== undefined && draft.sortOrder !== item.sortOrder) next.sortOrder = draft.sortOrder;
+  if (draft.badges !== undefined && !sameBadgeSelections(draft.badges, item.badges)) next.badges = draft.badges;
+  return next;
+}
+
+function menuMatchesFilters(item: MenuItem, filters: MenuFilterInput): boolean {
+  const normalizedQuery = filters.query.trim().toLowerCase();
+  const itemTypeKey = item.itemType ? `${item.itemType.source}:${item.itemType.id}` : "none";
+  const badgeKeys = item.badges.map(badgeKey);
+  const matchesQuery =
+    normalizedQuery.length === 0 ||
+    item.name.toLowerCase().includes(normalizedQuery) ||
+    item.description.toLowerCase().includes(normalizedQuery) ||
+    item.categoryPath.toLowerCase().includes(normalizedQuery) ||
+    item.itemType?.name.toLowerCase().includes(normalizedQuery) ||
+    item.prices.some((price) => price.label.toLowerCase().includes(normalizedQuery) || price.volumeText.toLowerCase().includes(normalizedQuery)) ||
+    item.badges.some((badge) => badge.name.toLowerCase().includes(normalizedQuery));
+  const matchesCategory = filters.categoryFilter === "all" || item.categoryId === filters.categoryFilter;
+  const matchesItemType = filters.itemTypeFilter === "all" || itemTypeKey === filters.itemTypeFilter;
+  const matchesSale = filters.saleFilter === "all" || item.saleStatus === filters.saleFilter;
+  const matchesVisibility =
+    filters.visibilityFilter === "all" || (filters.visibilityFilter === "visible" ? item.isVisible : !item.isVisible);
+  const matchesBadge = filters.badgeFilter === "all" || badgeKeys.includes(filters.badgeFilter);
+  return matchesQuery && matchesCategory && matchesItemType && matchesSale && matchesVisibility && matchesBadge;
+}
+
+function groupItemsByCategory(items: MenuItem[]): Array<{ categoryId: string; categoryPath: string; items: MenuItem[] }> {
+  const groups = new Map<string, { categoryId: string; categoryPath: string; items: MenuItem[] }>();
+  for (const item of items) {
+    const group = groups.get(item.categoryId) ?? { categoryId: item.categoryId, categoryPath: item.categoryPath, items: [] };
+    group.items.push(item);
+    groups.set(item.categoryId, group);
+  }
+  return [...groups.values()].sort((left, right) => left.categoryPath.localeCompare(right.categoryPath, "ko"));
+}
+
+function bulkFormToDraft(form: BulkForm): MenuListDraft {
+  const draft: MenuListDraft = {};
+  if (form.saleStatus !== "keep") draft.saleStatus = form.saleStatus;
+  if (form.visibility !== "keep") draft.isVisible = form.visibility === "visible";
+  if (form.categoryId !== "keep") draft.categoryId = form.categoryId;
+  if (form.badgeMode === "replace") draft.badges = form.badges;
+  if (form.badgeMode === "clear") draft.badges = [];
+  return draft;
+}
+
+function toBulkChanges(drafts: Record<string, MenuListDraft>): BulkMenuItemChange[] {
+  return Object.entries(drafts).map(([menuItemId, draft]) => ({
+    menuItemId,
+    ...draft
+  }));
+}
+
+function toMenuItemBadge(selection: MenuBadgeSelection, displayOrder: number, options: MenuBadgeOption[]): MenuItemBadge {
+  const option = options.find((badge) => badge.source === selection.source && badge.id === selection.id);
+  return {
+    source: selection.source,
+    id: selection.id,
+    name: option?.name ?? "사용할 수 없는 배지",
+    color: option?.color ?? {
+      id: "badge-color-missing",
+      name: "Unknown",
+      backgroundHex: "#666666",
+      textColor: "#FFFFFF",
+      isActive: false
+    },
+    displayOrder
+  };
+}
+
+function sameBadgeSelections(left: MenuBadgeSelection[], right: MenuBadgeSelection[]): boolean {
+  if (left.length !== right.length) return false;
+  return left.every((badge, index) => badgeKey(badge) === badgeKey(right[index] ?? { source: "system", id: "" }));
+}
+
+function badgeKey(badge: MenuBadgeSelection): string {
+  return `${badge.source}:${badge.id}`;
+}
+
+function hasMenuDraftMarker(item: MenuItem): boolean {
+  return Boolean((item as MenuItemWithDraft).__hasDraft);
+}
+
+function formatPrices(item: MenuItem): string {
+  if (!item.prices.length) return "가격 없음";
+  return item.prices.map((price) => `${price.label} ${price.amountMinor.toLocaleString("ko-KR")}원`).join(" · ");
+}
+
+function formatDateTime(value: string): string {
+  return new Intl.DateTimeFormat("ko-KR", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(new Date(value));
+}
+
+type DetailTemplate = MenuItemTypeOption["template"];
+type DetailField = {
+  key: string;
+  label: string;
+  kind?: "text" | "textarea" | "boolean";
+};
+
+const detailFields: Record<Exclude<DetailTemplate, "general">, DetailField[]> = {
+  wine: [
+    { key: "producer", label: "생산자" },
+    { key: "country", label: "국가" },
+    { key: "region", label: "지역·아펠라시옹" },
+    { key: "grapeVariety", label: "품종" },
+    { key: "vintage", label: "빈티지" },
+    { key: "style", label: "타입" },
+    { key: "sweetness", label: "당도" },
+    { key: "body", label: "바디" },
+    { key: "acidity", label: "산도" },
+    { key: "tannin", label: "탄닌" }
+  ],
+  whisky: [
+    { key: "brand", label: "브랜드·증류소" },
+    { key: "country", label: "국가" },
+    { key: "region", label: "지역" },
+    { key: "classification", label: "분류" },
+    { key: "ageStatement", label: "숙성 연수·NAS" },
+    { key: "caskFinish", label: "캐스크·피니시" },
+    { key: "vintageOrDistilledYear", label: "빈티지·증류연도" },
+    { key: "singleCask", label: "싱글 캐스크", kind: "boolean" },
+    { key: "caskStrength", label: "캐스크 스트렝스", kind: "boolean" },
+    { key: "nonChillFiltered", label: "논 칠 필터드", kind: "boolean" }
+  ],
+  spirit: [
+    { key: "brand", label: "브랜드·생산자" },
+    { key: "country", label: "국가" },
+    { key: "region", label: "지역·원산지" },
+    { key: "subType", label: "하위 유형" },
+    { key: "baseIngredient", label: "주원료" },
+    { key: "agingGrade", label: "숙성·등급" },
+    { key: "cask", label: "캐스크" }
+  ],
+  beer: [
+    { key: "brewery", label: "브루어리" },
+    { key: "country", label: "국가" },
+    { key: "style", label: "스타일" },
+    { key: "ibu", label: "IBU" },
+    { key: "ingredientsFlavor", label: "재료·풍미", kind: "textarea" }
+  ],
+  cocktail: [
+    { key: "baseSpirit", label: "베이스 스피릿" },
+    { key: "ingredients", label: "주요 재료", kind: "textarea" },
+    { key: "tasteStyle", label: "맛·스타일" },
+    { key: "method", label: "제조법" },
+    { key: "garnish", label: "가니시" },
+    { key: "glass", label: "글라스" }
+  ],
+  food: [
+    { key: "mainIngredients", label: "주요 재료", kind: "textarea" },
+    { key: "allergens", label: "알레르겐", kind: "textarea" },
+    { key: "spiceLevel", label: "매운 정도" },
+    { key: "dietary", label: "식이 라벨" },
+    { key: "servingSize", label: "제공량" },
+    { key: "pairing", label: "페어링" }
+  ],
+  cigar: [
+    { key: "brand", label: "브랜드" },
+    { key: "line", label: "라인" },
+    { key: "origin", label: "원산지" },
+    { key: "vitola", label: "비톨라" },
+    { key: "length", label: "길이" },
+    { key: "ringGauge", label: "링 게이지" },
+    { key: "wrapper", label: "래퍼" },
+    { key: "binder", label: "바인더" },
+    { key: "filler", label: "필러" },
+    { key: "strength", label: "강도" },
+    { key: "flavor", label: "풍미", kind: "textarea" },
+    { key: "smokingTime", label: "예상 흡연 시간" }
+  ]
+};
+
+function DetailFields({
+  details,
+  disabled,
+  onChange
+}: {
+  details: MenuItemDetails;
+  disabled: boolean;
+  onChange: (field: string, value: string | boolean) => void;
+}) {
+  if (details.template === "general") return null;
+  const fields = detailFields[details.template];
+  return (
+    <div className="menu-detail-grid">
+      {fields.map((field) => {
+        const value = (details as Record<string, string | boolean>)[field.key];
+        if (field.kind === "boolean") {
+          return (
+            <label className="check-row detail-check" key={field.key}>
+              <input
+                type="checkbox"
+                checked={Boolean(value)}
+                disabled={disabled}
+                onChange={(event) => onChange(field.key, event.target.checked)}
+              />
+              {field.label}
+            </label>
+          );
+        }
+        const textarea = field.kind === "textarea";
+        return (
+          <label className={`field ${textarea ? "full" : ""}`} key={field.key}>
+            <span>{field.label}</span>
+            {textarea ? (
+              <textarea
+                aria-label={field.label}
+                value={String(value ?? "")}
+                disabled={disabled}
+                maxLength={200}
+                onChange={(event) => onChange(field.key, event.target.value)}
+              />
+            ) : (
+              <input
+                aria-label={field.label}
+                value={String(value ?? "")}
+                disabled={disabled}
+                maxLength={80}
+                onChange={(event) => onChange(field.key, event.target.value)}
+              />
+            )}
+          </label>
+        );
+      })}
+    </div>
+  );
+}
+
+function emptyMenuForm(categoryId = ""): MenuForm {
+  return {
+    categoryId,
+    name: "",
+    description: "",
+    saleStatus: "available",
+    isVisible: true,
+    abv: "",
+    itemTypeKey: "none",
+    prices: [],
+    details: defaultDetails("general"),
+    internalMemo: "",
+    confirmDetailReset: false
+  };
+}
+
+function menuToForm(item: MenuItemDetail | null | undefined): MenuForm {
+  if (!item) return emptyMenuForm();
+  const template = item.details?.template ?? item.itemType?.template ?? "general";
+  return {
+    categoryId: item.categoryId,
+    name: item.name,
+    description: item.description,
+    saleStatus: item.saleStatus,
+    isVisible: item.isVisible,
+    abv: item.abv === null ? "" : String(item.abv),
+    itemTypeKey: item.itemType ? `${item.itemType.source}:${item.itemType.id}` : "none",
+    prices: (item.prices ?? []).map((price) => ({
+      localId: price.id,
+      label: price.label,
+      volumeText: price.volumeText,
+      amountMinor: String(price.amountMinor)
+    })),
+    details: item.details ?? defaultDetails(template),
+    internalMemo: item.internalMemo ?? "",
+    confirmDetailReset: false
+  };
+}
+
+function formToPayload(
+  form: MenuForm,
+  canEditInternalMemo: boolean
+): { value: CreateMenuItemRequest | UpdateMenuItemRequest } | { errors: FieldErrors } {
+  const errors: FieldErrors = {};
+  const abvText = form.abv.trim();
+  let abv: number | null = null;
+  if (abvText.length > 0) {
+    const value = Number(abvText);
+    if (!Number.isFinite(value)) {
+      errors.abv = ["ABV는 숫자로 입력하세요."];
+    } else {
+      abv = value;
+    }
+  }
+  const normalizedPriceLabels = new Set<string>();
+  const prices: MenuItemPriceInput[] = [];
+  form.prices.forEach((price, index) => {
+    const label = price.label.trim();
+    const amountText = price.amountMinor.trim();
+    const amountMinor = Number(amountText);
+    const normalizedLabel = label.replace(/\s+/g, " ").toLowerCase();
+    if (!label) errors.prices = ["가격 라벨을 입력하세요."];
+    if (!amountText || !Number.isInteger(amountMinor) || amountMinor < 0) errors.prices = ["가격 금액은 0 이상의 정수로 입력하세요."];
+    if (normalizedPriceLabels.has(normalizedLabel)) errors.prices = ["가격 라벨이 중복됩니다."];
+    normalizedPriceLabels.add(normalizedLabel);
+    prices.push({
+      label,
+      volumeText: price.volumeText.trim(),
+      amountMinor,
+      displayOrder: index
+    });
+  });
+  if (!form.categoryId) errors.categoryId = ["카테고리를 선택하세요."];
+  if (Object.keys(errors).length > 0) return { errors };
+  const value: CreateMenuItemRequest | UpdateMenuItemRequest = {
+    categoryId: form.categoryId,
+    name: form.name,
+    description: form.description,
+    saleStatus: form.saleStatus,
+    isVisible: form.isVisible,
+    abv,
+    itemType: parseItemType(form.itemTypeKey),
+    prices,
+    details: form.details,
+    confirmDetailReset: form.confirmDetailReset
+  };
+  if (canEditInternalMemo) value.internalMemo = form.internalMemo;
+  return {
+    value
+  };
+}
+
+function defaultDetails(template: DetailTemplate): MenuItemDetails {
+  switch (template) {
+    case "wine":
+      return {
+        template,
+        producer: "",
+        country: "",
+        region: "",
+        grapeVariety: "",
+        vintage: "",
+        style: "",
+        sweetness: "",
+        body: "",
+        acidity: "",
+        tannin: ""
+      };
+    case "whisky":
+      return {
+        template,
+        brand: "",
+        country: "",
+        region: "",
+        classification: "",
+        ageStatement: "",
+        caskFinish: "",
+        vintageOrDistilledYear: "",
+        singleCask: false,
+        caskStrength: false,
+        nonChillFiltered: false
+      };
+    case "spirit":
+      return {
+        template,
+        brand: "",
+        country: "",
+        region: "",
+        subType: "",
+        baseIngredient: "",
+        agingGrade: "",
+        cask: ""
+      };
+    case "beer":
+      return {
+        template,
+        brewery: "",
+        country: "",
+        style: "",
+        ibu: "",
+        ingredientsFlavor: ""
+      };
+    case "cocktail":
+      return {
+        template,
+        baseSpirit: "",
+        ingredients: "",
+        tasteStyle: "",
+        method: "",
+        garnish: "",
+        glass: ""
+      };
+    case "food":
+      return {
+        template,
+        mainIngredients: "",
+        allergens: "",
+        spiceLevel: "",
+        dietary: "",
+        servingSize: "",
+        pairing: ""
+      };
+    case "cigar":
+      return {
+        template,
+        brand: "",
+        line: "",
+        origin: "",
+        vitola: "",
+        length: "",
+        ringGauge: "",
+        wrapper: "",
+        binder: "",
+        filler: "",
+        strength: "",
+        flavor: "",
+        smokingTime: ""
+      };
+    case "general":
+      return { template };
+  }
+}
+
+function templateLabel(template: DetailTemplate): string {
+  const labels: Record<DetailTemplate, string> = {
+    general: "일반",
+    wine: "와인",
+    whisky: "위스키",
+    spirit: "스피릿",
+    beer: "맥주",
+    cocktail: "칵테일",
+    food: "푸드",
+    cigar: "시가"
+  };
+  return labels[template];
+}
+
+function detailsHasContent(details: MenuItemDetails): boolean {
+  return Object.entries(details).some(([key, value]) => {
+    if (key === "template") return false;
+    if (typeof value === "string") return value.trim().length > 0;
+    if (typeof value === "boolean") return value;
+    return value !== null && value !== undefined;
+  });
+}
+
+function moveArrayItem<T>(items: T[], from: number, to: number): T[] {
+  if (to < 0 || to >= items.length || from === to) return items;
+  const next = [...items];
+  const [item] = next.splice(from, 1);
+  if (item !== undefined) next.splice(to, 0, item);
+  return next;
+}
+
+function nextLocalId(): string {
+  return `draft-${globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`}`;
+}
+
+function parseItemType(value: string): MenuItemTypeSelection | null {
+  if (value === "none") return null;
+  const [source, id] = value.split(":");
+  if ((source === "system" || source === "bar") && id) return { source, id };
+  return null;
+}
+
+function MenuStatusState<T>({ state, navigate }: { state: LoadState<T>; navigate: Navigate }) {
+  if (state.status === "loading") {
+    return <MenuStatus title="메뉴 정보 로딩 중" message="메뉴 데이터를 불러오고 있습니다." />;
+  }
+  if (state.status === "unauthenticated") {
+    return (
+      <MenuStatus title="로그인이 필요합니다" message={state.message}>
+        <button className="button primary" type="button" onClick={() => navigate("/login")}>
+          로그인으로 이동
+        </button>
+      </MenuStatus>
+    );
+  }
+  if (state.status === "forbidden") {
+    return <MenuStatus title="접근할 수 없습니다" message={state.message} tone="error" />;
+  }
+  if (state.status === "error") {
+    return <MenuStatus title="메뉴 정보를 불러오지 못했습니다" message={state.message} tone="error" />;
+  }
+  return null;
+}
+
+function MenuStatus({
+  title,
+  message,
+  tone = "info",
+  children
+}: {
+  title: string;
+  message: string;
+  tone?: "info" | "error";
+  children?: ReactNode;
+}) {
+  return (
+    <section className={`panel dashboard-status ${tone}`} role={tone === "error" ? "alert" : "status"}>
+      <h1>{title}</h1>
+      <p>{message}</p>
+      {children}
+    </section>
+  );
+}
+
+function toLoadError<T>(error: unknown): LoadState<T> {
+  if (error instanceof AuthApiError && ["AUTH_REQUIRED", "SESSION_EXPIRED"].includes(error.code)) {
+    return { status: "unauthenticated", message: error.message };
+  }
+  if (
+    error instanceof AuthApiError &&
+    ["PASSWORD_CHANGE_REQUIRED", "SYSTEM_ADMIN_REQUIRED", "ACCOUNT_INACTIVE", "BAR_PERMISSION_REQUIRED"].includes(error.code)
+  ) {
+    return { status: "forbidden", message: error.message };
+  }
+  return { status: "error", message: error instanceof Error ? error.message : "요청을 처리하지 못했습니다." };
+}
+
+function handleFormError(
+  error: unknown,
+  setErrors: (errors: FieldErrors) => void,
+  setMessage: (message: string) => void,
+  setStatus: (status: SaveState) => void
+): void {
+  setStatus("error");
+  if (error instanceof AuthApiError) {
+    setErrors(error.fieldErrors);
+    setMessage(error.message);
+    return;
+  }
+  setErrors({});
+  setMessage(error instanceof Error ? error.message : "요청을 처리하지 못했습니다.");
+}
+
+function confirmDiscard(isDirty: boolean, onConfirm: () => void): void {
+  if (!isDirty || window.confirm("저장하지 않은 입력을 버릴까요?")) {
+    onConfirm();
+  }
+}

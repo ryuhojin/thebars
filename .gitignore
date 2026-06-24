@@ -1,0 +1,14 @@
+node_modules/
+.DS_Store
+
+**/test-results/
+**/playwright-report/
+**/.playwright/
+
+admin-menu-manager/dist/
+admin-menu-manager/coverage/
+admin-menu-manager/tsconfig.tsbuildinfo
+
+customer-menu-board/dist/
+customer-menu-board/coverage/
+customer-menu-board/tsconfig.tsbuildinfo

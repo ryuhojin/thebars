@@ -1,0 +1,11 @@
+@media (max-width: 767px) {
+  :root {
+    --page-pad: 16px;
+  }
+}
+
+@media (min-width: 768px) {
+  :root {
+    --page-pad: 28px;
+  }
+}

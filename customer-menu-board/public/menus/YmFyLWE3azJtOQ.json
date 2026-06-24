@@ -1,0 +1,138 @@
+{
+  "schemaVersion": 1,
+  "status": "published",
+  "revision": 12,
+  "publishedAt": "2026-06-23T00:00:00.000Z",
+  "generatedAt": "2026-06-23T00:00:00.000Z",
+  "contentHash": "0000000000000000000000000000000000000000000000000000000000000000",
+  "encodedSlug": "YmFyLWE3azJtOQ",
+  "bar": {
+    "name": "Sample Bar",
+    "intro": "클래식 칵테일과 위스키, 간단한 페어링 푸드를 편안하게 즐길 수 있는 바입니다.",
+    "currency": "KRW",
+    "address": "서울시 마포구 와우산로 00",
+    "mapUrl": "https://example.com/map",
+    "phoneNumberDisplay": "02-1234-5678",
+    "openingNote": "오늘 18:00-다음날 02:00",
+    "businessHours": [
+      { "dayOfWeek": 2, "opensAt": "18:00", "closesAt": "02:00" },
+      { "dayOfWeek": 3, "opensAt": "18:00", "closesAt": "02:00" }
+    ],
+    "links": [
+      {
+        "label": "Instagram",
+        "url": "https://example.com/sample-bar"
+      }
+    ]
+  },
+  "categories": [
+    {
+      "id": "cat_1",
+      "name": "추천",
+      "description": "Sample Bar가 추천하는 메뉴입니다.",
+      "items": [
+        {
+          "id": "menu_1",
+          "name": "하우스 하이볼",
+          "description": "시트러스와 탄산감을 살린 가벼운 하이볼",
+          "soldOut": false,
+          "abv": 8,
+          "prices": [
+            { "label": "잔", "volumeText": "330ml", "amountMinor": 12000, "currency": "KRW" }
+          ],
+          "badges": [
+            { "label": "추천", "backgroundHex": "#236B4A", "textColor": "#FFFFFF" }
+          ],
+          "fields": [
+            { "label": "베이스", "value": "블렌디드 위스키" },
+            { "label": "맛", "value": "시트러스, 청량" }
+          ]
+        }
+      ],
+      "children": []
+    },
+    {
+      "id": "cat_2",
+      "name": "위스키",
+      "items": [],
+      "children": [
+        {
+          "id": "cat_3",
+          "name": "싱글몰트",
+          "description": "잔 단위로 즐기는 대표 싱글몰트입니다.",
+          "items": [
+            {
+              "id": "menu_2",
+              "name": "맥캘란 12",
+              "description": "셰리 오크의 풍부한 건과일과 스파이스",
+              "soldOut": false,
+              "abv": 40,
+              "prices": [
+                { "label": "샷", "volumeText": "30ml", "amountMinor": 18000, "currency": "KRW" },
+                { "label": "더블", "volumeText": "60ml", "amountMinor": 34000, "currency": "KRW" }
+              ],
+              "badges": [
+                { "label": "스테디", "backgroundHex": "#725A3D", "textColor": "#FFFFFF" }
+              ],
+              "fields": [
+                { "label": "지역", "value": "Speyside" },
+                { "label": "캐스크", "value": "Sherry oak" }
+              ]
+            }
+          ],
+          "children": []
+        }
+      ]
+    },
+    {
+      "id": "cat_4",
+      "name": "칵테일",
+      "items": [
+        {
+          "id": "menu_3",
+          "name": "네그로니",
+          "description": "진, 캄파리, 스위트 베르무트",
+          "soldOut": true,
+          "abv": 24,
+          "prices": [],
+          "badges": [],
+          "fields": [
+            { "label": "글라스", "value": "Old fashioned" }
+          ]
+        }
+      ],
+      "children": []
+    },
+    {
+      "id": "cat_5",
+      "name": "푸드",
+      "items": [
+        {
+          "id": "menu_4",
+          "name": "치즈 플레이트",
+          "description": "숙성 치즈 3종과 견과류",
+          "soldOut": false,
+          "abv": null,
+          "prices": [
+            { "label": "플레이트", "amountMinor": 24000, "currency": "KRW" }
+          ],
+          "badges": [
+            { "label": "페어링", "backgroundHex": "#8B1E3F", "textColor": "#FFFFFF" }
+          ],
+          "fields": [
+            { "label": "알레르기", "value": "우유, 견과류" },
+            { "label": "인분", "value": "2인" }
+          ]
+        }
+      ],
+      "children": []
+    },
+    {
+      "id": "cat_6",
+      "name": "빈 카테고리",
+      "description": "오늘 준비 중인 섹션입니다.",
+      "items": [],
+      "children": []
+    }
+  ]
+}

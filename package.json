@@ -1,0 +1,25 @@
+{
+  "name": "bar-menu-operations",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "admin-menu-manager",
+    "customer-menu-board"
+  ],
+  "scripts": {
+    "lint": "node scripts/lint.mjs",
+    "format": "node scripts/lint.mjs",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "test:e2e": "npm run test:e2e --workspaces --if-present",
+    "build": "npm run build --workspaces --if-present",
+    "verify:migrations": "node scripts/verify-sqlite-migrations.mjs",
+    "verify:no-device-routes": "node scripts/verify-no-device-routes.mjs",
+    "verify:security": "node scripts/verify-security-invariants.mjs",
+    "verify:performance": "node scripts/verify-performance-budget.mjs",
+    "verify:pilot": "node scripts/verify-pilot-readiness.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "latest"
+  }
+}

@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="Bar Menu Operations v1.0 단일 URL 반응형 UI 와이어프레임" />
+  <title>Bar Menu Operations — 반응형 UI 와이어프레임</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <a class="skip-link" href="#preview">와이어프레임으로 건너뛰기</a>
+  <header class="workspace-header">
+    <div>
+      <p class="eyebrow">Bar Menu Operations v1.0</p>
+      <h1>통합 반응형 UI 와이어프레임</h1>
+      <p class="subtitle">같은 URL · 같은 상태 · 화면 폭에 따른 적응형 표현</p>
+    </div>
+    <div class="header-badges" aria-label="와이어프레임 특성">
+      <span>Low fidelity</span>
+      <span>Codex 구현 기준</span>
+      <span>단일 URL</span>
+    </div>
+  </header>
+
+  <main class="workspace-layout">
+    <aside class="screen-panel" aria-label="화면 목록">
+      <div class="screen-search-wrap">
+        <label for="screenSearch">화면 검색</label>
+        <input id="screenSearch" type="search" placeholder="화면·업무 ID·URL" autocomplete="off" />
+      </div>
+      <nav id="screenList" class="screen-list" aria-label="와이어프레임 화면"></nav>
+    </aside>
+
+    <section id="preview" class="preview-panel" aria-live="polite">
+      <div class="preview-toolbar">
+        <div class="screen-heading">
+          <p id="taskLabel" class="task-label"></p>
+          <h2 id="screenTitle"></h2>
+          <div class="route-row">
+            <span>제품 URL</span>
+            <code id="screenRoute"></code>
+          </div>
+        </div>
+
+        <div class="viewport-controls" role="group" aria-label="미리보기 화면 폭">
+          <button type="button" data-viewport="compact" aria-pressed="false">
+            <strong>Compact</strong><small>390×844</small>
+          </button>
+          <button type="button" data-viewport="medium" aria-pressed="false">
+            <strong>Medium</strong><small>768×1024</small>
+          </button>
+          <button type="button" data-viewport="wide" aria-pressed="true">
+            <strong>Wide</strong><small>1440×900</small>
+          </button>
+        </div>
+      </div>
+
+      <div class="preview-layout">
+        <div class="stage-wrap">
+          <div id="deviceFrame" class="device-frame is-wide">
+            <div class="browser-bar" aria-hidden="true">
+              <span class="browser-dot"></span><span class="browser-dot"></span><span class="browser-dot"></span>
+              <div id="browserAddress" class="browser-address"></div>
+            </div>
+            <div id="screenCanvas" class="screen-canvas"></div>
+          </div>
+        </div>
+
+        <aside class="annotation-panel" aria-label="화면 구현 메모">
+          <section>
+            <h3>사용자 목표</h3>
+            <p id="noteGoal"></p>
+          </section>
+          <section>
+            <h3>핵심 동작</h3>
+            <ul id="noteActions"></ul>
+          </section>
+          <section>
+            <h3>필수 상태</h3>
+            <ul id="noteStates"></ul>
+          </section>
+          <section>
+            <h3>반응형 기준</h3>
+            <p id="noteResponsive"></p>
+          </section>
+          <section class="implementation-note">
+            <h3>Codex 구현 메모</h3>
+            <p id="noteImplementation"></p>
+          </section>
+        </aside>
+      </div>
+    </section>
+  </main>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script src="app.js"></script>
+</body>
+</html>
