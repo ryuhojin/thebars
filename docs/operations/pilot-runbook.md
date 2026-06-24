@@ -10,6 +10,13 @@
 - preview migration은 빈 DB와 fixture DB에 먼저 적용한다.
 - production migration 전에는 D1 export 파일을 생성하고 export 파일 경로와 checksum을 release note에 기록한다.
 
+현재 원격 D1 binding:
+
+- preview: `thebar-preview` (`d852d5b8-a93e-4468-93f2-0083529bc68d`)
+- production: `thebar-production` (`407c68f2-a7c1-446d-8b9e-7b3be312bf4c`)
+
+2026-06-24에 preview 원격 DB에는 20개 migration(`0000_d00_foundation.sql`~`0019_d23_rate_limits.sql`) 적용을 확인했다. production 원격 DB는 production 승인 전까지 업무 table 없이 보존한다.
+
 ## Secret Checklist
 
 필수 secret 이름만 점검한다. 값은 문서, audit log, 브라우저, DB에 저장하지 않는다.

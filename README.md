@@ -633,3 +633,20 @@ npm run verify:pilot
 ```
 
 이 script는 D24 운영 문서, readiness contract/service/UI, production secret 원문 미포함, 파일럿 피드백의 P0/P1 open 0건 문구를 확인한다.
+
+## Cloudflare D1 원격 환경
+
+현재 관리자 Pages 설정은 preview와 production D1을 분리한다.
+
+- preview: `thebar-preview` (`d852d5b8-a93e-4468-93f2-0083529bc68d`)
+- production: `thebar-production` (`407c68f2-a7c1-446d-8b9e-7b3be312bf4c`)
+
+2026-06-24 기준 preview 원격 DB에는 `0000_d00_foundation.sql`부터 `0019_d23_rate_limits.sql`까지 20개 migration을 적용했다. production 원격 DB에는 아직 업무 table을 만들지 않았고, production migration은 export/checksum 기록과 사람 승인 후 별도 실행한다.
+
+확인 명령:
+
+```bash
+cd admin-menu-manager
+npx wrangler d1 execute thebar-preview --remote --command "SELECT COUNT(*) AS applied_migrations FROM d1_migrations;"
+npx wrangler d1 execute thebar-production --remote --command "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name;"
+```
