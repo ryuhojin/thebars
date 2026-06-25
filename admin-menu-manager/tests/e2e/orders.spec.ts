@@ -50,42 +50,59 @@ for (const viewport of viewports) {
 
     await page.goto(`/bars/${barId}/orders`);
     await expect(page).toHaveURL(new RegExp(`/bars/${barId}/orders$`));
-    await expect(page.getByRole("heading", { name: "주문 탭" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "테이블 목록" })).toBeVisible();
     await expect(page.getByLabel("현재 작업 바")).toHaveValue(barId);
-    await expect(page.getByText("오늘 정산")).toBeVisible();
-    await expect(page.getByText("계산 요청 큐")).toBeVisible();
+    const operationsSummary = page.getByLabel("테이블 운영 요약");
+    await expect(operationsSummary.getByText("열린 테이블")).toBeVisible();
+    await expect(operationsSummary.getByText("계산 요청 큐")).toBeVisible();
     await expect(page.locator(".orders-list-panel tr:visible, .orders-list-panel article:visible").filter({ hasText: "A1" }).first()).toBeVisible();
     await expect(page.locator(".orders-list-panel tr:visible, .orders-list-panel article:visible").filter({ hasText: "계산 요청" }).first()).toBeVisible();
     if (viewport.width >= 768) {
       const sidebar = page.locator(".sidebar");
-      await expect(sidebar.getByRole("link", { name: /주문 탭/ })).toBeVisible();
+      await expect(sidebar.getByRole("link", { name: /테이블 목록/ })).toBeVisible();
+      await expect(sidebar.getByRole("link", { name: /정산 내역/ })).toBeVisible();
     }
 
     const tableLabel = `T-${viewport.label}`;
     const firstDescription = `D18 ${viewport.label} 신규`;
-    await page.getByLabel("새 탭 테이블 라벨").fill(tableLabel);
-    await page.getByLabel("새 탭 손님 설명").fill(firstDescription);
-    await page.locator("#order-tab-create-form").getByRole("button", { name: "새 탭 생성" }).click();
-    await expect(page).toHaveURL(new RegExp(`/bars/${barId}/orders/[^/]+$`));
-    const orderTabId = new URL(page.url()).pathname.split("/").at(-1) ?? "";
-    await expect(page.getByLabel("상세 테이블 라벨")).toHaveValue(tableLabel);
-    await expect(page.getByLabel("상세 손님 설명")).toHaveValue(firstDescription);
+    await page.getByRole("button", { name: "테이블 생성", exact: true }).click();
+    await expect(page).toHaveURL(new RegExp(`/bars/${barId}/orders/new$`));
+    await expect(page.getByRole("heading", { name: "테이블 생성" })).toBeVisible();
+    await expect(page.locator(".page-return-row").getByRole("button", { name: "목록으로 가기" })).toBeVisible();
+    await page.getByLabel("새 테이블 라벨").fill(tableLabel);
+    await page.getByLabel("새 테이블 손님 설명").fill(firstDescription);
+    await page.locator("#order-tab-create-form").getByRole("button", { name: "테이블 생성" }).click();
+    await expect(page).toHaveURL(new RegExp(`/bars/${barId}/orders$`));
+    await expect(page.getByText(/테이블을 열었습니다\./)).toBeVisible();
+    const createdRow = page.locator(".orders-list-panel tr:visible, .orders-list-panel article:visible").filter({ hasText: tableLabel }).first();
+    await expect(createdRow).toBeVisible();
 
-    const updatedDescription = `resize 보존 ${viewport.label}`;
-    await page.getByLabel("상세 손님 설명").fill(updatedDescription);
+    await page.getByRole("button", { name: "테이블 생성", exact: true }).click();
+    await expect(page).toHaveURL(new RegExp(`/bars/${barId}/orders/new$`));
+    await expect(page.getByText(/테이블을 열었습니다\./)).toHaveCount(0);
+    await page.locator(".page-return-row").getByRole("button", { name: "목록으로 가기" }).click();
+    await expect(page).toHaveURL(new RegExp(`/bars/${barId}/orders$`));
+
+    await createdRow.getByRole("button", { name: "상세" }).click();
+    await expect(page).toHaveURL(new RegExp(`/bars/${barId}/orders/(?!new$)[^/]+$`));
+    const orderTabId = new URL(page.url()).pathname.split("/").at(-1) ?? "";
+    await expect(page.locator(".page-return-row").getByRole("button", { name: "목록으로 가기" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: new RegExp(tableLabel) })).toBeVisible();
+    await expect(page.getByRole("tab", { name: /주문 편집/ })).toHaveAttribute("aria-selected", "true");
+    await expect(page.locator("#order-work-panel")).toBeVisible();
+    await expect(page.locator("#settlement-work-panel")).toBeHidden();
+    await expect(page.locator(".orders-event-disclosure")).not.toHaveAttribute("open", "");
+    await expect(page.getByLabel("테이블 이벤트")).toBeHidden();
+
+    await page.getByLabel("주문 메뉴 검색").fill("맥");
     await page.setViewportSize({ width: 390, height: 844 });
     await expect(page).toHaveURL(new RegExp(`/bars/${barId}/orders/${orderTabId}$`));
-    await expect(page.getByLabel("상세 테이블 라벨")).toHaveValue(tableLabel);
-    await expect(page.getByLabel("상세 손님 설명")).toHaveValue(updatedDescription);
+    await expect(page.getByLabel("주문 메뉴 검색")).toHaveValue("맥");
     await expect(page.getByLabel("현재 작업 바")).toHaveValue(barId);
-
-    await page.getByRole("button", { name: "저장" }).click();
-    await expect(page.getByText("주문 탭 정보를 저장했습니다.")).toBeVisible();
-    await expect(page.getByText("저장됨")).toBeVisible();
 
     await page.setViewportSize({ width: viewport.width, height: viewport.height });
     await expect(page).toHaveURL(new RegExp(`/bars/${barId}/orders/${orderTabId}$`));
-    await expect(page.getByLabel("상세 손님 설명")).toHaveValue(updatedDescription);
+    await expect(page.getByLabel("주문 메뉴 검색")).toHaveValue("맥");
 
     await page.getByLabel("주문 메뉴 검색").fill("맥캘란");
     const macallanOption = page.locator("#order-menu-select option").filter({ hasText: "맥캘란 12" }).first();
@@ -112,7 +129,7 @@ for (const viewport of viewports) {
     const coverLine = page.locator(".order-line-card").filter({ hasText: "커버차지" });
     await expect(coverLine).toBeVisible();
     await expect(coverLine.getByText("10,000 KRW")).toBeVisible();
-    await expect(page.locator(".orders-detail-meta").getByText("64,000 KRW")).toBeVisible();
+    await expect(page.locator(".orders-detail-page .hero-panel .status-box").getByText("64,000 KRW")).toBeVisible();
 
     await page.getByLabel("조정 금액").fill("-4000");
     await page.getByLabel("금액 조정 사유").fill("단골 할인");
@@ -121,7 +138,7 @@ for (const viewport of viewports) {
     const discountLine = page.locator(".order-line-card").filter({ hasText: "단골 할인" });
     await expect(discountLine).toBeVisible();
     await expect(discountLine.locator("strong").getByText("-4,000 KRW", { exact: true })).toBeVisible();
-    await expect(page.locator(".orders-detail-meta").getByText("60,000 KRW")).toBeVisible();
+    await expect(page.locator(".orders-detail-page .hero-panel .status-box").getByText("60,000 KRW")).toBeVisible();
 
     await page.getByLabel("금액 조정 구분").selectOption("추가금");
     await page.getByLabel("조정 금액").fill("2000");
@@ -131,24 +148,30 @@ for (const viewport of viewports) {
     const surchargeLine = page.locator(".order-line-card").filter({ hasText: "잔 파손" });
     await expect(surchargeLine).toBeVisible();
     await expect(surchargeLine.locator("strong").getByText("2,000 KRW", { exact: true })).toBeVisible();
-    await expect(page.locator(".orders-detail-meta").getByText("62,000 KRW")).toBeVisible();
+    await expect(page.locator(".orders-detail-page .hero-panel .status-box").getByText("62,000 KRW")).toBeVisible();
 
     await discountLine.getByRole("button", { name: "취소" }).click();
     await page.getByLabel("취소 사유", { exact: true }).fill("오입력");
     await page.getByRole("button", { name: "취소 확정" }).click();
     await expect(page.getByText("주문 항목을 취소 처리했습니다.")).toBeVisible();
     await expect(page.getByText("취소: 오입력")).toBeVisible();
-    await expect(page.locator(".orders-detail-meta").getByText("66,000 KRW")).toBeVisible();
+    await expect(page.locator(".orders-detail-page .hero-panel .status-box").getByText("66,000 KRW")).toBeVisible();
 
-    await page.getByRole("button", { name: "계산 요청" }).first().click();
+    await page.getByRole("tab", { name: /결제·정산/ }).click();
+    await expect(page.getByRole("tab", { name: /결제·정산/ })).toHaveAttribute("aria-selected", "true");
+    await expect(page.locator("#settlement-work-panel")).toBeVisible();
+    await expect(page.locator("#order-work-panel")).toBeHidden();
+    await page.locator(".order-settlement-panel").getByRole("button", { name: "계산 요청", exact: true }).click();
     await expect(page.getByText("계산 요청으로 표시했습니다.")).toBeVisible();
     await expect(page.getByText("계산 요청 중", { exact: true })).toBeVisible();
-    await expect(page.locator(".orders-detail-meta").getByText("66,000 KRW")).toBeVisible();
+    await expect(page.locator(".orders-detail-page .hero-panel .status-box").getByText("66,000 KRW")).toBeVisible();
 
     await page.getByLabel("정산 메모").fill(`이체 확인 ${viewport.label}`);
+    await expect(page.locator(".settlement-confirm-card")).toBeVisible();
     await page.getByLabel("계좌이체 확인").check();
     await page.setViewportSize({ width: 390, height: 844 });
     await expect(page).toHaveURL(new RegExp(`/bars/${barId}/orders/${orderTabId}$`));
+    await expect(page.getByRole("tab", { name: /결제·정산/ })).toHaveAttribute("aria-selected", "true");
     await expect(page.getByLabel("정산 메모")).toHaveValue(`이체 확인 ${viewport.label}`);
     await expect(page.getByLabel("계좌이체 확인")).toBeChecked();
 
@@ -160,7 +183,17 @@ for (const viewport of viewports) {
     await expect(page.getByText("정산을 완료하고 최종 합계를 고정했습니다.")).toBeVisible();
     await expect(page.getByText("최종 합계", { exact: true })).toBeVisible();
     await expect(page.locator(".settlement-result-grid").getByText("66,000 KRW", { exact: true })).toBeVisible();
-    await expect(page.getByLabel("상세 테이블 라벨")).toBeDisabled();
+    await expect(page.getByLabel("상세 테이블 라벨")).toHaveCount(0);
+
+    await page.goto(`/bars/${barId}/settlements`);
+    await expect(page).toHaveURL(new RegExp(`/bars/${barId}/settlements$`));
+    await expect(page.getByRole("heading", { name: "정산 내역" })).toBeVisible();
+    await expect(page.getByText("정산 완료된 테이블만 조회합니다")).toBeVisible();
+    const settledRow = page.locator(".orders-list-panel tr:visible, .orders-list-panel article:visible").filter({ hasText: tableLabel }).first();
+    await expect(settledRow).toBeVisible();
+    await expect(settledRow.getByText("66,000 KRW", { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "테이블 생성" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "메뉴 추가" })).toHaveCount(0);
 
     await expectNoHorizontalOverflow(page);
     await expectTouchTargets(page);

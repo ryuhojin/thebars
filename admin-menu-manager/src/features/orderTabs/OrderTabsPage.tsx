@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import type {
   OrderMenuPickerItem,
   OrderTabDetailResponse,
@@ -8,7 +8,6 @@ import type {
   OrderTabStatus,
   OrderTabsResponse
 } from "../../../contracts/orderTabs";
-import { StickyActionBar } from "../../components/adaptive/StickyActionBar";
 import { AuthApiError } from "../auth/authApi";
 import { useDirtyWarning } from "../auth/useDirtyWarning";
 import {
@@ -81,22 +80,31 @@ type CancelForm = {
   reason: string;
 };
 
+type OrderDetailPanel = "order" | "settlement";
+
+const emptyCreateForm: CreateForm = { tableLabel: "", guestDescription: "" };
+
 export function OrderTabsPage({
   barId,
   orderTabId,
+  mode = "list",
   navigate
 }: {
   barId: string;
   orderTabId?: string;
+  mode?: "list" | "create";
   navigate: Navigate;
 }) {
+  const isCreateRoute = mode === "create";
+  const isDetailRoute = Boolean(orderTabId);
   const [listState, setListState] = useState<LoadState<OrderTabsResponse>>({ status: "loading" });
   const [detailState, setDetailState] = useState<LoadState<OrderTabDetailResponse> | null>(orderTabId ? { status: "loading" } : null);
   const [listReloadKey, setListReloadKey] = useState(0);
   const [detailReloadKey] = useState(0);
   const [statusFilter, setStatusFilter] = useState<OrderTabListQuery["status"]>("all");
   const [query, setQuery] = useState("");
-  const [createFormState, setCreateFormState] = useState<CreateForm>({ tableLabel: "", guestDescription: "" });
+  const [listMessage, setListMessage] = useState("");
+  const [createFormState, setCreateFormState] = useState<CreateForm>(emptyCreateForm);
   const [createErrors, setCreateErrors] = useState<FieldErrors>({});
   const [createMessage, setCreateMessage] = useState("");
   const [creating, setCreating] = useState(false);
@@ -104,6 +112,7 @@ export function OrderTabsPage({
   const [detailOriginal, setDetailOriginal] = useState<DetailForm>({ tableLabel: "", guestDescription: "" });
   const [detailErrors, setDetailErrors] = useState<FieldErrors>({});
   const [detailMessage, setDetailMessage] = useState("");
+  const [activeDetailPanel, setActiveDetailPanel] = useState<OrderDetailPanel>("order");
   const [saving, setSaving] = useState(false);
   const [addLineForm, setAddLineForm] = useState<AddLineForm>({ query: "", menuItemId: "", priceId: "", quantity: 1, confirmReopen: false });
   const [customLineForm, setCustomLineForm] = useState<CustomLineForm>({ name: "", unitAmountMinor: "", quantity: 1, reason: "", confirmReopen: false });
@@ -127,10 +136,28 @@ export function OrderTabsPage({
   const adjustmentDirty = Boolean(adjustmentForm.amountMinor.trim() || adjustmentForm.reason.trim() || adjustmentForm.label.trim() !== "할인");
   const settleDirty = settleForm.transferConfirmed || settleForm.note.trim().length > 0;
   const cancelDirty = cancelForm.reason.trim().length > 0;
-  useDirtyWarning(createDirty || detailDirty || voidDirty || customDirty || adjustmentDirty || settleDirty || cancelDirty);
+  const detailInteractionDirty = detailDirty || voidDirty || customDirty || adjustmentDirty || settleDirty || cancelDirty;
+  useDirtyWarning((isCreateRoute && createDirty) || (isDetailRoute && detailInteractionDirty));
+
+  useEffect(() => {
+    if (!isCreateRoute) return;
+    setListMessage("");
+    setCreateFormState(emptyCreateForm);
+    setCreateErrors({});
+    setCreateMessage("");
+  }, [barId, isCreateRoute]);
+
+  useEffect(() => {
+    if (isCreateRoute || isDetailRoute || typeof window === "undefined") return;
+    const message = window.sessionStorage.getItem(orderTabFlashKey(barId));
+    if (!message) return;
+    setListMessage(message);
+    window.sessionStorage.removeItem(orderTabFlashKey(barId));
+  }, [barId, isCreateRoute, isDetailRoute]);
 
   useEffect(() => {
     let cancelled = false;
+    if (isDetailRoute) return undefined;
     setListState({ status: "loading" });
     readOrderTabs(barId, { status: statusFilter, query })
       .then((data) => {
@@ -142,10 +169,11 @@ export function OrderTabsPage({
     return () => {
       cancelled = true;
     };
-  }, [barId, statusFilter, query, listReloadKey]);
+  }, [barId, statusFilter, query, listReloadKey, isDetailRoute]);
 
   useEffect(() => {
     let cancelled = false;
+    setActiveDetailPanel("order");
     if (!orderTabId) {
       setDetailState(null);
       setDetailForm({ tableLabel: "", guestDescription: "" });
@@ -187,14 +215,6 @@ export function OrderTabsPage({
     };
   }, [barId, orderTabId, detailReloadKey]);
 
-  const selectedTab = useMemo(() => {
-    if (detailState?.status === "ready") return detailState.data.tab;
-    if (listState.status !== "ready" || !orderTabId) return null;
-    return listState.data.tabs.find((tab) => tab.id === orderTabId) ?? null;
-  }, [detailState, listState, orderTabId]);
-
-  if (listState.status !== "ready") return <OrdersStatusState state={listState} navigate={navigate} />;
-
   const submitCreate = (event: FormEvent) => {
     event.preventDefault();
     setCreating(true);
@@ -202,10 +222,12 @@ export function OrderTabsPage({
     setCreateMessage("");
     createOrderTab(barId, createFormState)
       .then((data) => {
-        setCreateFormState({ tableLabel: "", guestDescription: "" });
-        setCreateMessage(`${data.tab.displayCode} 주문 탭을 열었습니다.`);
+        const message = `${data.tab.displayCode} 테이블을 열었습니다.`;
+        if (typeof window !== "undefined") window.sessionStorage.setItem(orderTabFlashKey(barId), message);
+        setCreateFormState(emptyCreateForm);
+        setCreateMessage("");
         setListReloadKey((value) => value + 1);
-        navigate(`/bars/${barId}/orders/${data.tab.id}`);
+        navigate(`/bars/${barId}/orders`);
       })
       .catch((error: unknown) => handleFormError(error, setCreateErrors, setCreateMessage))
       .finally(() => setCreating(false));
@@ -227,7 +249,7 @@ export function OrderTabsPage({
         setDetailState({ status: "ready", data });
         setDetailForm(nextForm);
         setDetailOriginal(nextForm);
-        setDetailMessage("주문 탭 정보를 저장했습니다.");
+        setDetailMessage("테이블 정보를 저장했습니다.");
         setListReloadKey((value) => value + 1);
       })
       .catch((error: unknown) => handleDetailError(error, setDetailErrors, setDetailMessage))
@@ -235,7 +257,7 @@ export function OrderTabsPage({
   };
 
   const selectTab = (tabId: string) => {
-    confirmDiscard(createDirty || detailDirty || voidDirty || customDirty || adjustmentDirty || settleDirty || cancelDirty, () => navigate(`/bars/${barId}/orders/${tabId}`));
+    confirmDiscard(detailInteractionDirty, () => navigate(`/bars/${barId}/orders/${tabId}`));
   };
 
   const submitAddLine = () => {
@@ -383,11 +405,11 @@ export function OrderTabsPage({
 
   const submitReopen = () => {
     if (!orderTabId || detailState?.status !== "ready") return;
-    if (!window.confirm("계산 요청을 해제하고 주문 탭을 다시 열까요?")) return;
+    if (!window.confirm("계산 요청을 해제하고 테이블을 다시 열까요?")) return;
     applyTransition(
       "reopen",
       () => reopenOrderTab(barId, orderTabId, { expectedVersion: detailState.data.tab.version, reason: "운영자 재오픈" }),
-      "주문 탭을 다시 열었습니다."
+      "테이블을 다시 열었습니다."
     );
   };
 
@@ -397,7 +419,7 @@ export function OrderTabsPage({
       setTransitionMessage("계좌이체 확인을 체크하세요.");
       return;
     }
-    if (!window.confirm("계좌이체 확인 후 이 주문 탭을 정산 완료로 닫을까요?")) return;
+    if (!window.confirm("계좌이체 확인 후 이 테이블을 정산 완료로 닫을까요?")) return;
     applyTransition(
       "settle",
       () =>
@@ -417,141 +439,52 @@ export function OrderTabsPage({
       setTransitionMessage("취소 사유를 입력하세요.");
       return;
     }
-    if (!window.confirm("이 주문 탭을 취소할까요? 주문 라인이 남아 있으면 취소할 수 없습니다.")) return;
+    if (!window.confirm("이 테이블을 취소할까요? 주문 라인이 남아 있으면 취소할 수 없습니다.")) return;
     applyTransition(
       "cancel",
       () => cancelOrderTab(barId, orderTabId, { expectedVersion: detailState.data.tab.version, reason: cancelForm.reason }),
-      "주문 탭을 취소했습니다."
+      "테이블을 취소했습니다."
     );
   };
 
-  const summary = listState.data.summary;
-  const dailySummary = listState.data.dailySummary;
-  const checkoutQueue = listState.data.tabs.filter((tab) => tab.status === "checkout_requested");
-  return (
-    <div className="page-stack orders-page" data-has-detail={orderTabId ? "true" : "false"}>
-      <section className="hero-panel" aria-labelledby="orders-title">
-        <div>
-          <p className="eyebrow">주문 운영</p>
-          <h1 id="orders-title">주문 탭</h1>
-          <p>{listState.data.bar.name}의 열린 주문 탭을 만들고 테이블·손님 설명을 최신 상태로 유지합니다.</p>
-        </div>
-        <div className="status-box" role="status">
-          <span>운영 중</span>
-          <strong>{summary.open + summary.checkoutRequested}개 탭</strong>
-          <small>계산 요청 {summary.checkoutRequested}개 · 전체 {summary.total}개</small>
-        </div>
-      </section>
+  const createButton = (
+    <button className="button primary" type="button" onClick={() => navigate(`/bars/${barId}/orders/new`)}>
+      테이블 생성
+    </button>
+  );
 
-      <section className="orders-summary-strip" aria-label="정산 요약">
-        <div>
-          <span>오늘 정산</span>
-          <strong>{formatMoney(dailySummary.settledTotalAmountMinor, dailySummary.currency)}</strong>
-          <small>{dailySummary.businessDate} · 완료 {dailySummary.settledTabCount}건 · 취소 {dailySummary.cancelledTabCount}건</small>
+  if (isDetailRoute) {
+    if (detailState?.status !== "ready") {
+      return (
+        <div className="page-stack orders-page orders-detail-page" data-has-detail="true">
+          <OrdersStatusState state={detailState ?? { status: "loading" }} navigate={navigate} />
         </div>
-        <div>
-          <span>계산 요청 큐</span>
-          <strong>{summary.checkoutRequested}개</strong>
-          <small>{checkoutQueue.length ? checkoutQueue.map((tab) => `${tab.displayCode} ${tab.tableLabel}`).join(", ") : "대기 없음"}</small>
+      );
+    }
+    const detailTab = detailState.data.tab;
+    return (
+      <div className="page-stack orders-page orders-detail-page" data-has-detail="true">
+        <div className="page-return-row">
+          <button className="button secondary" type="button" onClick={() => confirmDiscard(detailInteractionDirty, () => navigate(`/bars/${barId}/orders`))}>
+            목록으로 가기
+          </button>
         </div>
-      </section>
-
-      <section className="panel orders-toolbar-panel" aria-labelledby="orders-filter-title">
-        <div className="section-heading">
+        <section className="hero-panel" aria-labelledby="orders-detail-hero-title">
           <div>
-            <p className="eyebrow">조회 조건</p>
-            <h2 id="orders-filter-title">탭 찾기</h2>
+            <p className="eyebrow">테이블 상세</p>
+            <h1 id="orders-detail-hero-title">{detailTab.displayCode} · {detailTab.tableLabel}</h1>
+            <p>{detailState.data.bar.name}의 선택 테이블에서 메뉴 추가, 수량 변경, 계산 요청, 정산을 처리합니다.</p>
           </div>
-          <a className="button secondary" data-app-link href={`/bars/${barId}/preview`}>
-            메뉴판 확인
-          </a>
-        </div>
-        <div className="filter-grid">
-          <label className="field">
-            <span>상태</span>
-            <select aria-label="주문 탭 상태 필터" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as OrderTabListQuery["status"])}>
-              <option value="all">전체</option>
-              <option value="open">열림</option>
-              <option value="checkout_requested">계산 요청</option>
-              <option value="closed">닫힘</option>
-              <option value="cancelled">취소</option>
-            </select>
-          </label>
-          <label className="field">
-            <span>검색</span>
-            <input
-              aria-label="주문 탭 검색"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="테이블, 손님 설명, 탭 번호"
-            />
-          </label>
-        </div>
-      </section>
-
-      <div className="orders-workspace">
-        <section className="panel orders-list-panel" aria-labelledby="orders-list-title">
-          <div className="section-heading">
-            <div>
-              <p className="eyebrow">열린 주문</p>
-              <h2 id="orders-list-title">탭 목록</h2>
-            </div>
-            <span className="status-badge active">{listState.data.tabs.length}개 표시</span>
+          <div className="status-box" role="status">
+            <span>현재 합계</span>
+            <strong>{formatMoney(detailTab.finalTotalAmountMinor ?? detailTab.totalAmountMinor, detailTab.currency)}</strong>
+            <small>{detailTab.activeItemCount}개 항목 · v{detailTab.version}</small>
           </div>
-          <OrderTabList tabs={listState.data.tabs} selectedId={selectedTab?.id ?? ""} onSelect={selectTab} />
         </section>
 
-        <section className="panel orders-create-panel" aria-labelledby="orders-create-title">
-          <div className="section-heading">
-            <div>
-              <p className="eyebrow">새 주문</p>
-              <h2 id="orders-create-title">새 탭 생성</h2>
-            </div>
-          </div>
-          <form id="order-tab-create-form" className="orders-form" onSubmit={submitCreate} noValidate>
-            {createMessage ? <div className="form-status" role="status">{createMessage}</div> : null}
-            <label className="field" htmlFor="order-tab-table-label">
-              <span>테이블 라벨</span>
-              <input
-                id="order-tab-table-label"
-                aria-label="새 탭 테이블 라벨"
-                aria-invalid={createErrors.tableLabel?.length ? "true" : undefined}
-                aria-describedby={createErrors.tableLabel?.length ? "order-tab-table-label-error" : undefined}
-                value={createFormState.tableLabel}
-                onChange={(event) => setCreateFormState((current) => ({ ...current, tableLabel: event.target.value }))}
-                placeholder="예: A1, Bar 3"
-              />
-              {createErrors.tableLabel?.length ? <strong id="order-tab-table-label-error" className="field-error">{createErrors.tableLabel[0]}</strong> : null}
-            </label>
-            <label className="field" htmlFor="order-tab-guest-description">
-              <span>손님 설명</span>
-              <textarea
-                id="order-tab-guest-description"
-                aria-label="새 탭 손님 설명"
-                aria-invalid={createErrors.guestDescription?.length ? "true" : undefined}
-                aria-describedby={createErrors.guestDescription?.length ? "order-tab-guest-description-error" : undefined}
-                value={createFormState.guestDescription}
-                onChange={(event) => setCreateFormState((current) => ({ ...current, guestDescription: event.target.value }))}
-                placeholder="예: 2명, 창가, 단골"
-              />
-              {createErrors.guestDescription?.length ? <strong id="order-tab-guest-description-error" className="field-error">{createErrors.guestDescription[0]}</strong> : null}
-            </label>
-            <div className="orders-new-tab-actions">
-              <button className="button primary" type="submit" disabled={creating}>
-                {creating ? "생성 중" : "새 탭 생성"}
-              </button>
-            </div>
-          </form>
-        </section>
-
-        <section className="panel orders-detail-panel" aria-labelledby="orders-detail-title">
+        <section className="panel orders-detail-panel orders-detail-standalone" aria-labelledby="orders-detail-title">
           <DetailPanel
             state={detailState}
-            form={detailForm}
-            original={detailOriginal}
-            errors={detailErrors}
-            message={detailMessage}
-            saving={saving}
             addLineForm={addLineForm}
             customLineForm={customLineForm}
             adjustmentForm={adjustmentForm}
@@ -566,12 +499,13 @@ export function OrderTabsPage({
             cancelForm={cancelForm}
             transitioning={transitioning}
             transitionMessage={transitionMessage}
-            onFormChange={setDetailForm}
+            activePanel={activeDetailPanel}
             onAddLineFormChange={setAddLineForm}
             onCustomLineFormChange={setCustomLineForm}
             onAdjustmentFormChange={setAdjustmentForm}
             onSettleFormChange={setSettleForm}
             onCancelFormChange={setCancelForm}
+            onActivePanelChange={setActiveDetailPanel}
             onAddLine={submitAddLine}
             onAddCustomLine={submitCustomLine}
             onAddAdjustment={submitAdjustment}
@@ -583,47 +517,273 @@ export function OrderTabsPage({
             onReopen={submitReopen}
             onSettle={submitSettle}
             onCancel={submitCancel}
-            onSubmit={submitDetail}
-            onBack={() => confirmDiscard(detailDirty || voidDirty || customDirty || adjustmentDirty || settleDirty || cancelDirty, () => navigate(`/bars/${barId}/orders`))}
           />
         </section>
-      </div>
 
-      <StickyActionBar>
-        <span>
-          {selectedTab ? `${selectedTab.displayCode} ${selectedTab.tableLabel} · ${formatMoney(selectedTab.totalAmountMinor, selectedTab.currency)}` : "선택: 없음"}
-        </span>
-        <div className="orders-sticky-actions">
-          <button className="button secondary" type="button" onClick={() => navigate(`/bars/${barId}/orders`)}>
-            목록
+      </div>
+    );
+  }
+
+  if (listState.status !== "ready") return <OrdersStatusState state={listState} navigate={navigate} />;
+
+  const summary = listState.data.summary;
+  const checkoutQueue = listState.data.tabs.filter((tab) => tab.status === "checkout_requested");
+
+  if (isCreateRoute) {
+    return (
+      <div className="page-stack orders-page orders-create-page" data-has-detail="false">
+        <div className="page-return-row">
+          <button className="button secondary" type="button" onClick={() => confirmDiscard(createDirty, () => navigate(`/bars/${barId}/orders`))}>
+            목록으로 가기
           </button>
-          {detailState?.status === "ready" && detailState.data.tab.status === "open" ? (
-            <button className="button primary" type="button" disabled={transitioning === "checkout"} onClick={submitCheckoutRequest}>
-              계산 요청
-            </button>
-          ) : null}
-          {detailState?.status === "ready" && detailState.data.tab.status === "checkout_requested" ? (
-            <>
-              <label className="sticky-check">
-                <input
-                  type="checkbox"
-                  checked={settleForm.transferConfirmed}
-                  onChange={(event) => setSettleForm({ ...settleForm, transferConfirmed: event.target.checked })}
-                />
-                <span>이체 확인</span>
-              </label>
-              <button className="button primary" type="button" disabled={transitioning === "settle" || !settleForm.transferConfirmed} onClick={submitSettle}>
-                정산 완료
-              </button>
-            </>
-          ) : null}
-          {detailState?.status !== "ready" ? (
-            <button className="button primary" type="submit" form="order-tab-create-form" disabled={creating}>
-              새 탭 생성
-            </button>
-          ) : null}
         </div>
-      </StickyActionBar>
+        <section className="hero-panel" aria-labelledby="orders-create-hero-title">
+          <div>
+            <p className="eyebrow">주문 운영</p>
+            <h1 id="orders-create-hero-title">테이블 생성</h1>
+            <p>{listState.data.bar.name}에 새 테이블 주문 기록을 만들고 목록에서 상세로 들어가 메뉴를 추가합니다.</p>
+          </div>
+          <div className="status-box" role="status">
+            <span>현재 운영</span>
+            <strong>{summary.open + summary.checkoutRequested}개 테이블</strong>
+            <small>계산 요청 {summary.checkoutRequested}개 · 전체 {summary.total}개</small>
+          </div>
+        </section>
+
+        <section className="panel orders-create-panel orders-create-standalone" aria-labelledby="orders-create-title">
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow">새 테이블</p>
+              <h2 id="orders-create-title">새 테이블 정보</h2>
+            </div>
+          </div>
+          <form id="order-tab-create-form" className="orders-form" onSubmit={submitCreate} noValidate>
+            {createMessage ? <div className="form-status" role="status">{createMessage}</div> : null}
+            <label className="field" htmlFor="order-tab-table-label">
+              <span>테이블 라벨</span>
+              <input
+                id="order-tab-table-label"
+                aria-label="새 테이블 라벨"
+                aria-invalid={createErrors.tableLabel?.length ? "true" : undefined}
+                aria-describedby={createErrors.tableLabel?.length ? "order-tab-table-label-error" : undefined}
+                value={createFormState.tableLabel}
+                onChange={(event) => setCreateFormState((current) => ({ ...current, tableLabel: event.target.value }))}
+                placeholder="예: A1, Bar 3"
+              />
+              {createErrors.tableLabel?.length ? <strong id="order-tab-table-label-error" className="field-error">{createErrors.tableLabel[0]}</strong> : null}
+            </label>
+            <label className="field" htmlFor="order-tab-guest-description">
+              <span>손님 설명</span>
+              <textarea
+                id="order-tab-guest-description"
+                aria-label="새 테이블 손님 설명"
+                aria-invalid={createErrors.guestDescription?.length ? "true" : undefined}
+                aria-describedby={createErrors.guestDescription?.length ? "order-tab-guest-description-error" : undefined}
+                value={createFormState.guestDescription}
+                onChange={(event) => setCreateFormState((current) => ({ ...current, guestDescription: event.target.value }))}
+                placeholder="예: 2명, 창가, 단골"
+              />
+              {createErrors.guestDescription?.length ? <strong id="order-tab-guest-description-error" className="field-error">{createErrors.guestDescription[0]}</strong> : null}
+            </label>
+            <div className="orders-new-tab-actions">
+              <button className="button secondary" type="button" onClick={() => confirmDiscard(createDirty, () => navigate(`/bars/${barId}/orders`))}>
+                취소
+              </button>
+              <button className="button primary" type="submit" disabled={creating}>
+                {creating ? "생성 중" : "테이블 생성"}
+              </button>
+            </div>
+          </form>
+        </section>
+      </div>
+    );
+  }
+
+  return (
+    <div className="page-stack orders-page orders-list-page" data-has-detail="false">
+      <section className="hero-panel" aria-labelledby="orders-title">
+        <div>
+          <p className="eyebrow">주문 운영</p>
+          <h1 id="orders-title">테이블 목록</h1>
+          <p>{listState.data.bar.name}의 열린 테이블을 만들고, 테이블 상세에서 메뉴와 금액을 관리합니다.</p>
+        </div>
+        <div className="status-box" role="status">
+          <span>운영 중</span>
+          <strong>{summary.open + summary.checkoutRequested}개 테이블</strong>
+          <small>계산 요청 {summary.checkoutRequested}개 · 전체 {summary.total}개</small>
+        </div>
+      </section>
+
+      <section className="orders-summary-strip orders-kpi-strip" aria-label="테이블 운영 요약">
+        <div>
+          <span>열린 테이블</span>
+          <strong>{summary.open}개</strong>
+          <small>상세에서 메뉴를 추가하고 계산 요청으로 전환합니다.</small>
+        </div>
+        <div>
+          <span>계산 요청 큐</span>
+          <strong>{summary.checkoutRequested}개</strong>
+          <small>{checkoutQueue.length ? checkoutQueue.map((tab) => `${tab.displayCode} ${tab.tableLabel}`).join(", ") : "대기 없음"}</small>
+        </div>
+        <div>
+          <span>전체 테이블</span>
+          <strong>{summary.total}개</strong>
+          <small>필터 기준으로 테이블을 빠르게 찾습니다.</small>
+        </div>
+        <a className="orders-kpi-link" data-app-link href={`/bars/${barId}/settlements`}>
+          <span>정산 내역</span>
+          <strong>{summary.closed}건</strong>
+          <small>정산 완료된 테이블만 조회</small>
+        </a>
+      </section>
+
+      {listMessage ? <div className="form-status" role="status">{listMessage}</div> : null}
+
+      <section className="panel orders-toolbar-panel" aria-labelledby="orders-filter-title">
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">조회 조건</p>
+            <h2 id="orders-filter-title">테이블 찾기</h2>
+          </div>
+          <a className="button secondary" data-app-link href={`/bars/${barId}/preview`}>
+            메뉴판 확인
+          </a>
+        </div>
+        <div className="orders-status-tabs" role="group" aria-label="테이블 상태 필터">
+          {[
+            ["open", `열림 ${summary.open}`],
+            ["checkout_requested", `계산 요청 ${summary.checkoutRequested}`],
+            ["all", `전체 ${summary.total}`],
+            ["cancelled", `취소 ${summary.cancelled}`]
+          ].map(([value, label]) => (
+            <button
+              className={statusFilter === value ? "status-filter-tab is-active" : "status-filter-tab"}
+              type="button"
+              aria-pressed={statusFilter === value}
+              key={value}
+              onClick={() => setStatusFilter(value as OrderTabListQuery["status"])}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <div className="filter-grid orders-search-row">
+          <label className="field">
+            <span>검색</span>
+            <input
+              aria-label="테이블 검색"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="테이블, 손님 설명, 번호"
+            />
+          </label>
+        </div>
+      </section>
+
+      <div className="orders-workspace">
+        <section className="panel orders-list-panel" aria-labelledby="orders-list-title">
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow">열린 테이블</p>
+              <h2 id="orders-list-title">현재 테이블</h2>
+            </div>
+            <div className="inline-actions">
+              <span className="status-badge active">{listState.data.tabs.length}개 표시</span>
+              {createButton}
+            </div>
+          </div>
+          <OrderTabList tabs={listState.data.tabs} selectedId="" onSelect={selectTab} />
+        </section>
+      </div>
+    </div>
+  );
+}
+
+export function OrderSettlementsPage({ barId, navigate }: { barId: string; navigate: Navigate }) {
+  const [state, setState] = useState<LoadState<OrderTabsResponse>>({ status: "loading" });
+  const [query, setQuery] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    setState({ status: "loading" });
+    readOrderTabs(barId, { status: "closed", query })
+      .then((data) => {
+        if (!cancelled) setState({ status: "ready", data: { ...data, tabs: data.tabs.filter((tab) => tab.status === "closed") } });
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) setState(toLoadError(error));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [barId, query]);
+
+  if (state.status !== "ready") return <OrdersStatusState state={state} navigate={navigate} />;
+
+  const settledTabs = state.data.tabs;
+  const dailySummary = state.data.dailySummary;
+  const settledTotal = settledTabs.reduce((total, tab) => total + settlementAmount(tab), 0);
+
+  return (
+    <div className="page-stack orders-page settlements-page">
+      <section className="hero-panel" aria-labelledby="settlements-title">
+        <div>
+          <p className="eyebrow">정산</p>
+          <h1 id="settlements-title">정산 내역</h1>
+          <p>{state.data.bar.name}에서 정산 완료된 테이블만 조회합니다. 열린 테이블과 취소 건은 주문 운영에서 관리합니다.</p>
+        </div>
+        <div className="status-box" role="status">
+          <span>정산 완료</span>
+          <strong>{settledTabs.length}건</strong>
+          <small>{formatMoney(settledTotal, dailySummary.currency)}</small>
+        </div>
+      </section>
+
+      <section className="orders-summary-strip" aria-label="정산 완료 요약">
+        <div>
+          <span>오늘 정산</span>
+          <strong>{formatMoney(dailySummary.settledTotalAmountMinor, dailySummary.currency)}</strong>
+          <small>{dailySummary.businessDate} · 완료 {dailySummary.settledTabCount}건</small>
+        </div>
+        <div>
+          <span>현재 조회</span>
+          <strong>{settledTabs.length}건</strong>
+          <small>정산 완료된 테이블만 표시합니다.</small>
+        </div>
+      </section>
+
+      <section className="panel orders-toolbar-panel" aria-labelledby="settlements-filter-title">
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">조회 조건</p>
+            <h2 id="settlements-filter-title">정산 찾기</h2>
+          </div>
+          <a className="button secondary" data-app-link href={`/bars/${barId}/orders`}>
+            테이블 목록
+          </a>
+        </div>
+        <label className="field" htmlFor="settlements-query">
+          <span>검색</span>
+          <input
+            id="settlements-query"
+            aria-label="정산 내역 검색"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="테이블, 손님 설명, 번호"
+          />
+        </label>
+      </section>
+
+      <section className="panel orders-list-panel" aria-labelledby="settlements-list-title">
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">정산 완료</p>
+            <h2 id="settlements-list-title">정산된 테이블</h2>
+          </div>
+          <span className="status-badge active">{settledTabs.length}건 표시</span>
+        </div>
+        <SettlementList tabs={settledTabs} />
+      </section>
     </div>
   );
 }
@@ -632,17 +792,17 @@ function OrderTabList({ tabs, selectedId, onSelect }: { tabs: OrderTabDto[]; sel
   if (tabs.length === 0) {
     return (
       <div className="dashboard-empty" role="status">
-        <strong>표시할 주문 탭이 없습니다.</strong>
-        <p>필터를 조정하거나 새 탭을 생성하세요.</p>
+        <strong>표시할 테이블이 없습니다.</strong>
+        <p>필터를 조정하거나 테이블을 생성하세요.</p>
       </div>
     );
   }
   return (
-    <div className="orders-data-view" aria-label="주문 탭 목록">
+    <div className="orders-data-view orders-board-view" aria-label="테이블 목록">
       <table className="data-table orders-table">
         <thead>
           <tr>
-            <th scope="col">탭</th>
+            <th scope="col">번호</th>
             <th scope="col">테이블</th>
             <th scope="col">상태</th>
             <th scope="col">합계</th>
@@ -694,13 +854,71 @@ function OrderTabList({ tabs, selectedId, onSelect }: { tabs: OrderTabDto[]; sel
   );
 }
 
+function SettlementList({ tabs }: { tabs: OrderTabDto[] }) {
+  if (tabs.length === 0) {
+    return (
+      <div className="dashboard-empty" role="status">
+        <strong>정산 완료된 테이블이 없습니다.</strong>
+        <p>주문 운영에서 계산 요청 후 정산 완료한 테이블만 표시됩니다.</p>
+      </div>
+    );
+  }
+  return (
+    <div className="orders-data-view" aria-label="정산 완료 목록">
+      <table className="data-table orders-table">
+        <thead>
+          <tr>
+            <th scope="col">번호</th>
+            <th scope="col">테이블</th>
+            <th scope="col">최종 합계</th>
+            <th scope="col">정산 시각</th>
+            <th scope="col">항목</th>
+          </tr>
+        </thead>
+        <tbody>
+          {tabs.map((tab) => (
+            <tr key={tab.id}>
+              <td>{tab.displayCode}</td>
+              <td>
+                <strong>{tab.tableLabel}</strong>
+                <small>{tab.guestDescription || "설명 없음"}</small>
+              </td>
+              <td>{formatMoney(settlementAmount(tab), tab.currency)}</td>
+              <td>{tab.settledAt ? formatDate(tab.settledAt) : "기록 없음"}</td>
+              <td>{tab.activeItemCount}개</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      <div className="data-cards">
+        {tabs.map((tab) => (
+          <article className="data-card order-tab-card" key={tab.id}>
+            <div className="order-card-heading">
+              <strong>{tab.displayCode} · {tab.tableLabel}</strong>
+              <OrderStatusBadge status={tab.status} />
+            </div>
+            <div className="card-row">
+              <span>최종 합계</span>
+              <strong>{formatMoney(settlementAmount(tab), tab.currency)}</strong>
+            </div>
+            <div className="card-row">
+              <span>정산 시각</span>
+              <strong>{tab.settledAt ? formatDate(tab.settledAt) : "기록 없음"}</strong>
+            </div>
+            <div className="card-row">
+              <span>손님</span>
+              <strong>{tab.guestDescription || "설명 없음"}</strong>
+            </div>
+          </article>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function DetailPanel({
   state,
-  form,
-  original,
-  errors,
-  message,
-  saving,
   addLineForm,
   customLineForm,
   adjustmentForm,
@@ -715,12 +933,13 @@ function DetailPanel({
   cancelForm,
   transitioning,
   transitionMessage,
-  onFormChange,
+  activePanel,
   onAddLineFormChange,
   onCustomLineFormChange,
   onAdjustmentFormChange,
   onSettleFormChange,
   onCancelFormChange,
+  onActivePanelChange,
   onAddLine,
   onAddCustomLine,
   onAddAdjustment,
@@ -731,16 +950,9 @@ function DetailPanel({
   onRequestCheckout,
   onReopen,
   onSettle,
-  onCancel,
-  onSubmit,
-  onBack
+  onCancel
 }: {
   state: LoadState<OrderTabDetailResponse> | null;
-  form: DetailForm;
-  original: DetailForm;
-  errors: FieldErrors;
-  message: string;
-  saving: boolean;
   addLineForm: AddLineForm;
   customLineForm: CustomLineForm;
   adjustmentForm: AdjustmentForm;
@@ -755,12 +967,13 @@ function DetailPanel({
   cancelForm: CancelForm;
   transitioning: string;
   transitionMessage: string;
-  onFormChange: (form: DetailForm) => void;
+  activePanel: OrderDetailPanel;
   onAddLineFormChange: (form: AddLineForm) => void;
   onCustomLineFormChange: (form: CustomLineForm) => void;
   onAdjustmentFormChange: (form: AdjustmentForm) => void;
   onSettleFormChange: (form: SettleForm) => void;
   onCancelFormChange: (form: CancelForm) => void;
+  onActivePanelChange: (panel: OrderDetailPanel) => void;
   onAddLine: () => void;
   onAddCustomLine: () => void;
   onAddAdjustment: () => void;
@@ -772,27 +985,23 @@ function DetailPanel({
   onReopen: () => void;
   onSettle: () => void;
   onCancel: () => void;
-  onSubmit: (event: FormEvent) => void;
-  onBack: () => void;
 }) {
   if (state === null) {
     return (
       <div className="orders-detail-empty" role="status">
         <p className="eyebrow">상세 정보</p>
-        <h2 id="orders-detail-title">탭 상세</h2>
-        <p>목록에서 탭을 선택하면 테이블 라벨과 손님 설명을 수정할 수 있습니다.</p>
+        <h2 id="orders-detail-title">테이블 상세</h2>
+        <p>목록에서 테이블 상세를 열면 메뉴 추가와 계산 요청을 진행할 수 있습니다.</p>
       </div>
     );
   }
   if (state.status !== "ready") {
     return <OrdersStatusState state={state} navigate={() => undefined} compact />;
   }
-  const dirty = JSON.stringify(form) !== JSON.stringify(original);
   const filteredPickerItems = filterPickerItems(state.data.menuPicker.items, addLineForm.query);
   const selectedMenu = state.data.menuPicker.items.find((item) => item.id === addLineForm.menuItemId) ?? null;
   const selectedPrice = selectedMenu?.prices.find((price) => price.id === addLineForm.priceId) ?? selectedMenu?.prices[0] ?? null;
   const canMutateLines = state.data.tab.status !== "closed" && state.data.tab.status !== "cancelled";
-  const canEditDetails = canMutateLines;
   const customAmount = parseAmountMinor(customLineForm.unitAmountMinor);
   const adjustmentAmount = parseAmountMinor(adjustmentForm.amountMinor);
   const customPreview = customAmount === null ? null : customAmount * customLineForm.quantity;
@@ -802,54 +1011,45 @@ function DetailPanel({
       <div className="section-heading">
         <div>
           <p className="eyebrow">상세 정보</p>
-          <h2 id="orders-detail-title">{state.data.tab.displayCode} 주문 탭</h2>
+          <h2 id="orders-detail-title">{state.data.tab.displayCode} 테이블</h2>
         </div>
         <OrderStatusBadge status={state.data.tab.status} />
       </div>
-      <div className="orders-detail-meta" role="status">
-        <span>version {state.data.tab.version}</span>
-        <span>{formatMoney(state.data.tab.totalAmountMinor, state.data.tab.currency)}</span>
-        <span>{state.data.tab.activeItemCount}개 항목</span>
-        {dirty ? <span className="status-badge locked">미저장</span> : <span className="status-badge active">저장됨</span>}
-      </div>
-      {message ? <div className={message.includes("다시") ? "form-status error" : "form-status"} role={message.includes("다시") ? "alert" : "status"}>{message}</div> : null}
-      <form className="orders-form" onSubmit={onSubmit} noValidate>
-        <label className="field" htmlFor="order-detail-table-label">
-          <span>테이블 라벨</span>
-          <input
-            id="order-detail-table-label"
-            aria-label="상세 테이블 라벨"
-            aria-invalid={errors.tableLabel?.length ? "true" : undefined}
-            aria-describedby={errors.tableLabel?.length ? "order-detail-table-label-error" : undefined}
-            value={form.tableLabel}
-            onChange={(event) => onFormChange({ ...form, tableLabel: event.target.value })}
-            disabled={!canEditDetails}
-          />
-          {errors.tableLabel?.length ? <strong id="order-detail-table-label-error" className="field-error">{errors.tableLabel[0]}</strong> : null}
-        </label>
-        <label className="field" htmlFor="order-detail-guest-description">
-          <span>손님 설명</span>
-          <textarea
-            id="order-detail-guest-description"
-            aria-label="상세 손님 설명"
-            aria-invalid={errors.guestDescription?.length ? "true" : undefined}
-            aria-describedby={errors.guestDescription?.length ? "order-detail-guest-description-error" : undefined}
-            value={form.guestDescription}
-            onChange={(event) => onFormChange({ ...form, guestDescription: event.target.value })}
-            disabled={!canEditDetails}
-          />
-          {errors.guestDescription?.length ? <strong id="order-detail-guest-description-error" className="field-error">{errors.guestDescription[0]}</strong> : null}
-        </label>
-        <div className="form-actions">
-          <button className="button secondary" type="button" onClick={onBack}>
-            목록
-          </button>
-          <button className="button primary" type="submit" disabled={!canEditDetails || !dirty || saving}>
-            {saving ? "저장 중" : "탭 정보 저장"}
-          </button>
-        </div>
-      </form>
 
+      <div className="orders-detail-tabs" role="tablist" aria-label="테이블 상세 작업">
+        <button
+          id="order-detail-tab-order"
+          className={activePanel === "order" ? "orders-detail-tab is-active" : "orders-detail-tab"}
+          type="button"
+          role="tab"
+          aria-selected={activePanel === "order"}
+          aria-controls="order-work-panel"
+          onClick={() => onActivePanelChange("order")}
+        >
+          <strong>주문 편집</strong>
+          <span>{state.data.tab.activeItemCount}개 항목</span>
+        </button>
+        <button
+          id="order-detail-tab-settlement"
+          className={activePanel === "settlement" ? "orders-detail-tab is-active" : "orders-detail-tab"}
+          type="button"
+          role="tab"
+          aria-selected={activePanel === "settlement"}
+          aria-controls="settlement-work-panel"
+          onClick={() => onActivePanelChange("settlement")}
+        >
+          <strong>결제·정산</strong>
+          <span>{formatMoney(state.data.tab.finalTotalAmountMinor ?? state.data.tab.totalAmountMinor, state.data.tab.currency)}</span>
+        </button>
+      </div>
+
+      <div
+        id="order-work-panel"
+        className="orders-detail-tab-panel"
+        role="tabpanel"
+        aria-labelledby="order-detail-tab-order"
+        hidden={activePanel !== "order"}
+      >
       <section className="order-lines-section" aria-labelledby="order-lines-title">
         <div className="section-heading">
           <div>
@@ -991,7 +1191,7 @@ function DetailPanel({
               checked={addLineForm.confirmReopen}
               onChange={(event) => onAddLineFormChange({ ...addLineForm, confirmReopen: event.target.checked })}
             />
-            <span>계산 요청 중인 탭을 다시 열고 주문을 추가합니다.</span>
+                  <span>계산 요청 중인 테이블을 다시 열고 주문을 추가합니다.</span>
           </label>
         ) : null}
         <div className="order-picker-actions">
@@ -1075,7 +1275,7 @@ function DetailPanel({
                     checked={customLineForm.confirmReopen}
                     onChange={(event) => onCustomLineFormChange({ ...customLineForm, confirmReopen: event.target.checked })}
                   />
-                  <span>계산 요청 중인 탭을 다시 열고 기타 항목을 추가합니다.</span>
+                  <span>계산 요청 중인 테이블을 다시 열고 기타 항목을 추가합니다.</span>
                 </label>
               ) : null}
               <div className="order-picker-actions">
@@ -1151,7 +1351,7 @@ function DetailPanel({
                     checked={adjustmentForm.confirmReopen}
                     onChange={(event) => onAdjustmentFormChange({ ...adjustmentForm, confirmReopen: event.target.checked })}
                   />
-                  <span>계산 요청 중인 탭을 다시 열고 금액 조정을 추가합니다.</span>
+                  <span>계산 요청 중인 테이블을 다시 열고 금액 조정을 추가합니다.</span>
                 </label>
               ) : null}
               <div className="order-picker-actions">
@@ -1169,7 +1369,15 @@ function DetailPanel({
           ) : null}
         </section>
       ) : null}
+      </div>
 
+      <div
+        id="settlement-work-panel"
+        className="orders-detail-tab-panel"
+        role="tabpanel"
+        aria-labelledby="order-detail-tab-settlement"
+        hidden={activePanel !== "settlement"}
+      >
       <section className="order-settlement-panel" aria-labelledby="order-settlement-title">
         <div className="section-heading">
           <div>
@@ -1187,8 +1395,8 @@ function DetailPanel({
         {state.data.tab.status === "open" ? (
           <div className="settlement-action-card">
             <div>
-              <strong>열린 탭</strong>
-              <span>손님이 계산을 요청하면 탭을 계산 요청 큐에 올립니다.</span>
+              <strong>열린 테이블</strong>
+              <span>손님이 계산을 요청하면 테이블을 계산 요청 큐에 올립니다.</span>
             </div>
             <button className="button primary" type="button" disabled={transitioning === "checkout"} onClick={onRequestCheckout}>
               {transitioning === "checkout" ? "요청 중" : "계산 요청"}
@@ -1200,15 +1408,18 @@ function DetailPanel({
           <div className="settlement-action-card settlement-grid">
             <div>
               <strong>계산 요청 중</strong>
-              <span>계좌이체 확인 후 최종 합계를 고정하고 탭을 닫습니다.</span>
+              <span>계좌이체 확인 후 최종 합계를 고정하고 테이블을 닫습니다.</span>
             </div>
-            <label className="checkbox-row">
+            <label className="settlement-confirm-card">
               <input
                 type="checkbox"
                 checked={settleForm.transferConfirmed}
                 onChange={(event) => onSettleFormChange({ ...settleForm, transferConfirmed: event.target.checked })}
               />
-              <span>계좌이체 확인</span>
+              <span>
+                <strong>계좌이체 확인</strong>
+                <small>입금 확인 후 체크하면 정산 완료 버튼이 활성화됩니다.</small>
+              </span>
             </label>
             <label className="field" htmlFor="settlement-note">
               <span>정산 메모</span>
@@ -1263,7 +1474,7 @@ function DetailPanel({
               <span>취소 사유</span>
               <input
                 id="order-cancel-reason"
-                aria-label="주문 탭 취소 사유"
+                aria-label="테이블 취소 사유"
                 value={cancelForm.reason}
                 onChange={(event) => onCancelFormChange({ reason: event.target.value })}
                 placeholder={state.data.tab.activeItemCount > 0 ? "진행 중인 주문 항목을 먼저 취소 처리하세요" : "예: 손님 착석 취소"}
@@ -1276,27 +1487,34 @@ function DetailPanel({
               disabled={transitioning === "cancel" || state.data.tab.activeItemCount > 0 || !cancelForm.reason.trim()}
               onClick={onCancel}
             >
-              {transitioning === "cancel" ? "취소 중" : "탭 취소"}
+              {transitioning === "cancel" ? "취소 중" : "테이블 취소"}
             </button>
           </div>
         ) : null}
       </section>
-
-      <div className="orders-event-list" aria-label="주문 탭 이벤트">
-        {state.data.events.map((event) => (
-          <div key={event.id}>
-            <span>{formatDate(event.createdAt)}</span>
-            <strong>{event.note}</strong>
-            <small>v{event.resultingVersion}</small>
-          </div>
-        ))}
       </div>
+
+      <details className="orders-event-disclosure">
+        <summary>
+          <span>변경 히스토리</span>
+          <strong>{state.data.events.length}건</strong>
+        </summary>
+        <div className="orders-event-list" aria-label="테이블 이벤트">
+          {state.data.events.map((event) => (
+            <div key={event.id}>
+              <span>{formatDate(event.createdAt)}</span>
+              <strong>{event.note}</strong>
+              <small>v{event.resultingVersion}</small>
+            </div>
+          ))}
+        </div>
+      </details>
     </div>
   );
 }
 
 function OrderStatusBadge({ status }: { status: OrderTabStatus }) {
-  const label = status === "open" ? "열림" : status === "checkout_requested" ? "계산 요청" : status === "closed" ? "닫힘" : "취소";
+  const label = status === "open" ? "열림" : status === "checkout_requested" ? "계산 요청" : status === "closed" ? "정산 완료" : "취소";
   const className =
     status === "open"
       ? "status-badge active"
@@ -1309,14 +1527,14 @@ function OrderStatusBadge({ status }: { status: OrderTabStatus }) {
 function OrdersStatusState({ state, navigate, compact = false }: { state: LoadState<unknown>; navigate: Navigate; compact?: boolean }) {
   const title =
     state.status === "loading"
-      ? "주문 탭을 불러오는 중"
+      ? "테이블을 불러오는 중"
       : state.status === "unauthenticated"
         ? "로그인이 필요합니다"
         : state.status === "forbidden"
           ? "접근할 수 없습니다"
           : state.status === "not-found"
-            ? "주문 탭을 찾을 수 없습니다"
-            : "주문 탭을 불러오지 못했습니다";
+            ? "테이블을 찾을 수 없습니다"
+            : "테이블을 불러오지 못했습니다";
   const message = state.status === "loading" ? "잠시만 기다려 주세요." : state.status === "ready" ? "" : state.message;
   const className = `${compact ? "dashboard-status" : "panel dashboard-status"} ${state.status === "loading" ? "info" : "error"} ${compact ? "compact-status" : ""}`;
   return (
@@ -1382,7 +1600,7 @@ function toLoadError(error: unknown): LoadState<never> {
     if (error.code === "ORDER_PERMISSION_REQUIRED" || error.code === "BAR_PERMISSION_REQUIRED") return { status: "forbidden", message: error.message };
     return { status: "error", message: error.message, code: error.code };
   }
-  return { status: "error", message: error instanceof Error ? error.message : "주문 탭 정보를 불러오지 못했습니다." };
+  return { status: "error", message: error instanceof Error ? error.message : "테이블 정보를 불러오지 못했습니다." };
 }
 
 function confirmDiscard(isDirty: boolean, callback: () => void) {
@@ -1413,8 +1631,16 @@ function lineTypeLabel(type: OrderTabItemDto["type"]): string {
   return "메뉴";
 }
 
+function settlementAmount(tab: OrderTabDto): number {
+  return tab.finalTotalAmountMinor ?? tab.totalAmountMinor;
+}
+
 function createIdempotencyKey(): string {
   return crypto.randomUUID?.() ?? `order-line-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function orderTabFlashKey(barId: string): string {
+  return `thebar:order-tabs:flash:${barId}`;
 }
 
 function formatMoney(amountMinor: number, currency: string): string {

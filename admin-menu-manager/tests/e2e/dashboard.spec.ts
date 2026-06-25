@@ -88,7 +88,7 @@ for (const viewport of viewports) {
     await expect(page.getByText("현재 계정에는 아직 바 소속이 없습니다.")).toBeVisible();
     await expect(page.getByText("활성 사용자")).toHaveCount(0);
     await expect(page.locator(".selected-bar-summary")).toHaveText("선택된 바 없음");
-    await expect(page.getByRole("button", { name: /주문 탭 보기/ })).toBeDisabled();
+    await expect(page.getByRole("button", { name: /테이블 목록 보기/ })).toBeDisabled();
 
     await expectNoHorizontalOverflow(page);
     await expectTouchTargets(page);

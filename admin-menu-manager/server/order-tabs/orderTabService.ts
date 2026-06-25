@@ -106,7 +106,7 @@ export class OrderTabService {
     const access = await this.requireOrderAccess(actor, barId);
     const bar = access.bar;
     const tab = await this.repository.findOrderTabById(bar.id, orderTabId);
-    if (!tab) throw new AuthServiceError(404, "ORDER_TAB_NOT_FOUND", "주문 탭을 찾을 수 없습니다.");
+    if (!tab) throw new AuthServiceError(404, "ORDER_TAB_NOT_FOUND", "테이블을 찾을 수 없습니다.");
     return this.readDetailResponse(bar, tab, access.permissions);
   }
 
@@ -129,13 +129,13 @@ export class OrderTabService {
       now: nowIso(this.now())
     });
     if (result.kind === "not_found") {
-      throw new AuthServiceError(404, "ORDER_TAB_NOT_FOUND", "주문 탭을 찾을 수 없습니다.");
+      throw new AuthServiceError(404, "ORDER_TAB_NOT_FOUND", "테이블을 찾을 수 없습니다.");
     }
     if (result.kind === "version_conflict") {
       throw new AuthServiceError(409, "ORDER_TAB_VERSION_CONFLICT", "다른 변경이 먼저 저장되었습니다. 다시 불러온 뒤 저장하세요.", {}, { latestVersion: result.current.version });
     }
     if (result.kind === "immutable") {
-      throw new AuthServiceError(409, "ORDER_TAB_IMMUTABLE", "닫혔거나 취소된 주문 탭은 수정할 수 없습니다.", {}, { status: result.current.status });
+      throw new AuthServiceError(409, "ORDER_TAB_IMMUTABLE", "정산 완료 또는 취소된 테이블은 수정할 수 없습니다.", {}, { status: result.current.status });
     }
     return this.readDetailResponse(bar, result.tab, access.permissions);
   }
@@ -273,7 +273,7 @@ export class OrderTabService {
     const access = await this.requireOrderAccess(actor, barId);
     const bar = access.bar;
     const existingTab = await this.repository.findOrderTabById(bar.id, orderTabId);
-    if (!existingTab) throw new AuthServiceError(404, "ORDER_TAB_NOT_FOUND", "주문 탭을 찾을 수 없습니다.");
+    if (!existingTab) throw new AuthServiceError(404, "ORDER_TAB_NOT_FOUND", "테이블을 찾을 수 없습니다.");
     const requestHash = stableRequestHash({
       operation: "order_item_add",
       orderTabId,
@@ -346,7 +346,7 @@ export class OrderTabService {
     const access = await this.requireCustomOrderAccess(actor, barId);
     const bar = access.bar;
     const existingTab = await this.repository.findOrderTabById(bar.id, orderTabId);
-    if (!existingTab) throw new AuthServiceError(404, "ORDER_TAB_NOT_FOUND", "주문 탭을 찾을 수 없습니다.");
+    if (!existingTab) throw new AuthServiceError(404, "ORDER_TAB_NOT_FOUND", "테이블을 찾을 수 없습니다.");
     const requestHash = stableRequestHash({
       operation: "order_custom_item_add",
       orderTabId,
@@ -414,7 +414,7 @@ export class OrderTabService {
     const access = await this.requireAdjustmentOrderAccess(actor, barId);
     const bar = access.bar;
     const existingTab = await this.repository.findOrderTabById(bar.id, orderTabId);
-    if (!existingTab) throw new AuthServiceError(404, "ORDER_TAB_NOT_FOUND", "주문 탭을 찾을 수 없습니다.");
+    if (!existingTab) throw new AuthServiceError(404, "ORDER_TAB_NOT_FOUND", "테이블을 찾을 수 없습니다.");
     const requestHash = stableRequestHash({
       operation: "order_adjustment_add",
       orderTabId,
@@ -610,7 +610,7 @@ export class OrderTabService {
     const rolePermissions = await this.membershipRepository.ensureDefaultRolePermissions(bar.id, nowIso(this.now()));
     const rolePermission = rolePermissions.find((permission) => permission.role === membership.role);
     if (!rolePermission?.canManageOrders) {
-      throw new AuthServiceError(403, "ORDER_PERMISSION_REQUIRED", "이 바에서 주문 탭을 관리할 권한이 없습니다.");
+      throw new AuthServiceError(403, "ORDER_PERMISSION_REQUIRED", "이 바에서 테이블 주문을 관리할 권한이 없습니다.");
     }
     return {
       bar,
@@ -752,13 +752,13 @@ function businessDateFrom(date: Date): string {
 
 function throwOrderTabTransitionError(result: Exclude<OrderTabTransitionResult, { kind: "updated" }>): never {
   if (result.kind === "not_found") {
-    throw new AuthServiceError(404, "ORDER_TAB_NOT_FOUND", "주문 탭을 찾을 수 없습니다.");
+    throw new AuthServiceError(404, "ORDER_TAB_NOT_FOUND", "테이블을 찾을 수 없습니다.");
   }
   if (result.kind === "version_conflict") {
     throw new AuthServiceError(409, "ORDER_TAB_VERSION_CONFLICT", "다른 변경이 먼저 저장되었습니다. 다시 불러온 뒤 저장하세요.", {}, { latestVersion: result.current.version });
   }
   if (result.kind === "immutable") {
-    throw new AuthServiceError(409, "ORDER_TAB_IMMUTABLE", "닫혔거나 취소된 주문 탭은 수정할 수 없습니다.", {}, { status: result.current.status });
+    throw new AuthServiceError(409, "ORDER_TAB_IMMUTABLE", "정산 완료 또는 취소된 테이블은 수정할 수 없습니다.", {}, { status: result.current.status });
   }
   if (result.kind === "empty_settle") {
     throw new AuthServiceError(422, "ORDER_TAB_EMPTY", "주문 라인이 없는 탭은 정산할 수 없습니다.", {}, { status: result.current.status });
@@ -768,12 +768,12 @@ function throwOrderTabTransitionError(result: Exclude<OrderTabTransitionResult, 
       activeItemCount: result.current.activeItemCount
     });
   }
-  throw new AuthServiceError(409, "ORDER_TAB_STATUS_CONFLICT", "현재 주문 탭 상태에서는 이 작업을 수행할 수 없습니다.", {}, { status: result.current.status });
+  throw new AuthServiceError(409, "ORDER_TAB_STATUS_CONFLICT", "현재 테이블 상태에서는 이 작업을 수행할 수 없습니다.", {}, { status: result.current.status });
 }
 
 function throwOrderItemMutationError(result: Exclude<OrderItemMutationResult, { kind: "updated" }>): never {
   if (result.kind === "not_found") {
-    throw new AuthServiceError(404, "ORDER_TAB_NOT_FOUND", "주문 탭을 찾을 수 없습니다.");
+    throw new AuthServiceError(404, "ORDER_TAB_NOT_FOUND", "테이블을 찾을 수 없습니다.");
   }
   if (result.kind === "item_not_found") {
     throw new AuthServiceError(404, "ORDER_ITEM_NOT_FOUND", "주문 라인을 찾을 수 없습니다.");
@@ -788,7 +788,7 @@ function throwOrderItemMutationError(result: Exclude<OrderItemMutationResult, { 
     });
   }
   if (result.kind === "immutable") {
-    throw new AuthServiceError(409, "ORDER_TAB_IMMUTABLE", "닫혔거나 취소된 주문 탭은 수정할 수 없습니다.", {}, { status: result.current.status });
+    throw new AuthServiceError(409, "ORDER_TAB_IMMUTABLE", "정산 완료 또는 취소된 테이블은 수정할 수 없습니다.", {}, { status: result.current.status });
   }
   if (result.kind === "line_immutable") {
     throw new AuthServiceError(409, "ORDER_ITEM_IMMUTABLE", "취소 처리된 주문 항목은 수정할 수 없습니다.", {}, { itemStatus: result.item.status });
@@ -805,7 +805,7 @@ function throwOrderItemMutationError(result: Exclude<OrderItemMutationResult, { 
 function mapRepositoryError(error: unknown): AuthServiceError {
   if (error instanceof AuthServiceError) return error;
   if (error instanceof Error && /UNIQUE|constraint|ORDER_TAB_NUMBER/i.test(error.message)) {
-    return new AuthServiceError(409, "ORDER_TAB_NUMBER_CONFLICT", "주문 탭 번호를 할당하지 못했습니다. 다시 시도하세요.");
+    return new AuthServiceError(409, "ORDER_TAB_NUMBER_CONFLICT", "테이블 번호를 할당하지 못했습니다. 다시 시도하세요.");
   }
   throw error;
 }

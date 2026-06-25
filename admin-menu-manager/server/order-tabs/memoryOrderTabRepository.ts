@@ -107,7 +107,7 @@ export class MemoryOrderTabRepository implements OrderTabRepository {
       afterStatus: tab.status,
       expectedVersion: null,
       resultingVersion: tab.version,
-      note: input.note ?? "주문 탭 생성",
+      note: input.note ?? "테이블 생성",
       actorUserId: input.createdByUserId,
       createdAt: input.now
     };
@@ -139,7 +139,7 @@ export class MemoryOrderTabRepository implements OrderTabRepository {
       afterStatus: updated.status,
       expectedVersion: input.expectedVersion,
       resultingVersion: updated.version,
-      note: "주문 탭 설명 수정",
+      note: "테이블 설명 수정",
       actorUserId: input.updatedByUserId,
       createdAt: input.now
     };
@@ -199,7 +199,7 @@ export class MemoryOrderTabRepository implements OrderTabRepository {
       afterStatus: updated.status,
       expectedVersion: input.expectedVersion,
       resultingVersion: updated.version,
-      note: input.reason ? `재오픈: ${input.reason}` : "주문 탭 재오픈",
+      note: input.reason ? `재오픈: ${input.reason}` : "테이블 재오픈",
       actorUserId: input.actorUserId,
       createdAt: input.now
     });
@@ -277,7 +277,7 @@ export class MemoryOrderTabRepository implements OrderTabRepository {
       afterStatus: updated.status,
       expectedVersion: input.expectedVersion,
       resultingVersion: updated.version,
-      note: `주문 탭 취소: ${input.reason}`,
+      note: `테이블 취소: ${input.reason}`,
       actorUserId: input.actorUserId,
       createdAt: input.now
     });

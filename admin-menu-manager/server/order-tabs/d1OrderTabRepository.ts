@@ -245,7 +245,7 @@ export class D1OrderTabRepository implements OrderTabRepository {
             resulting_version, note, actor_user_id, created_at
           ) VALUES (?, ?, ?, 'tab_created', NULL, ?, NULL, 1, ?, ?, ?)`
         )
-        .bind(input.eventId, input.barId, input.id, input.status, input.note ?? "주문 탭 생성", input.createdByUserId, input.now)
+        .bind(input.eventId, input.barId, input.id, input.status, input.note ?? "테이블 생성", input.createdByUserId, input.now)
     ]);
     const tab = await this.findOrderTabById(input.barId, input.id);
     const event = await this.findEventById(input.eventId);
@@ -285,7 +285,7 @@ export class D1OrderTabRepository implements OrderTabRepository {
         `INSERT INTO order_tab_events (
           id, bar_id, order_tab_id, event_type, before_status, after_status, expected_version,
           resulting_version, note, actor_user_id, created_at
-        ) VALUES (?, ?, ?, 'tab_updated', ?, ?, ?, ?, '주문 탭 설명 수정', ?, ?)`
+        ) VALUES (?, ?, ?, 'tab_updated', ?, ?, ?, ?, '테이블 설명 수정', ?, ?)`
       )
       .bind(
         input.eventId,
@@ -364,7 +364,7 @@ export class D1OrderTabRepository implements OrderTabRepository {
         afterStatus: "open",
         expectedVersion: input.expectedVersion,
         resultingVersion: nextVersion,
-        note: input.reason ? `재오픈: ${input.reason}` : "주문 탭 재오픈",
+        note: input.reason ? `재오픈: ${input.reason}` : "테이블 재오픈",
         actorUserId: input.actorUserId,
         createdAt: input.now
       })
@@ -455,7 +455,7 @@ export class D1OrderTabRepository implements OrderTabRepository {
         afterStatus: "cancelled",
         expectedVersion: input.expectedVersion,
         resultingVersion: nextVersion,
-        note: `주문 탭 취소: ${input.reason}`,
+        note: `테이블 취소: ${input.reason}`,
         actorUserId: input.actorUserId,
         createdAt: input.now
       })

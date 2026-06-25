@@ -18,6 +18,7 @@ const MembersPage = lazy(() => import("../../features/memberships/MembersPage").
 const MenuItemEditorPage = lazy(() => import("../../features/menuItems/MenuItemsPage").then((module) => ({ default: module.MenuItemEditorPage })));
 const MenuItemsPage = lazy(() => import("../../features/menuItems/MenuItemsPage").then((module) => ({ default: module.MenuItemsPage })));
 const OrderTabsPage = lazy(() => import("../../features/orderTabs/OrderTabsPage").then((module) => ({ default: module.OrderTabsPage })));
+const OrderSettlementsPage = lazy(() => import("../../features/orderTabs/OrderTabsPage").then((module) => ({ default: module.OrderSettlementsPage })));
 const PreviewPage = lazy(() => import("../../features/preview/PreviewPage").then((module) => ({ default: module.PreviewPage })));
 const PublicationsPage = lazy(() => import("../../features/publications/PublicationsPage").then((module) => ({ default: module.PublicationsPage })));
 const SystemUsersPage = lazy(() => import("../../features/systemUsers/SystemUsersPage").then((module) => ({ default: module.SystemUsersPage })));
@@ -65,7 +66,9 @@ export function AdminApp() {
     const previewMatch = pathname.match(/^\/bars\/([^/]+)\/preview$/);
     const publicationsMatch = pathname.match(/^\/bars\/([^/]+)\/publications$/);
     const ordersMatch = pathname.match(/^\/bars\/([^/]+)\/orders$/);
+    const newOrderMatch = pathname.match(/^\/bars\/([^/]+)\/orders\/new$/);
     const orderDetailMatch = pathname.match(/^\/bars\/([^/]+)\/orders\/([^/]+)$/);
+    const settlementsMatch = pathname.match(/^\/bars\/([^/]+)\/settlements$/);
     const barDetailMatch = pathname.match(/^\/bars\/([^/]+)$/);
 
     if (barMembersMatch?.[1]) {
@@ -92,6 +95,8 @@ export function AdminApp() {
       content = <PublicationsPage barId={decodeURIComponent(publicationsMatch[1])} navigate={navigate} />;
     } else if (ordersMatch?.[1]) {
       content = <OrderTabsPage barId={decodeURIComponent(ordersMatch[1])} navigate={navigate} />;
+    } else if (newOrderMatch?.[1]) {
+      content = <OrderTabsPage barId={decodeURIComponent(newOrderMatch[1])} mode="create" navigate={navigate} />;
     } else if (orderDetailMatch?.[1] && orderDetailMatch[2]) {
       content = (
         <OrderTabsPage
@@ -100,6 +105,8 @@ export function AdminApp() {
           navigate={navigate}
         />
       );
+    } else if (settlementsMatch?.[1]) {
+      content = <OrderSettlementsPage barId={decodeURIComponent(settlementsMatch[1])} navigate={navigate} />;
     } else if (barDetailMatch?.[1]) {
       content = <BarDetailPage barId={decodeURIComponent(barDetailMatch[1])} navigate={navigate} />;
     } else {

@@ -278,7 +278,7 @@ function AuthFrame({
         <div className="auth-visual-copy">
           <p className="eyebrow">THE BAR ADMIN</p>
           <h1>바 운영을 위한 관리자 콘솔</h1>
-          <p>메뉴 공개, 주문 탭, 권한 관리를 한 곳에서 다루는 운영자 전용 공간입니다.</p>
+          <p>메뉴 공개, 테이블 주문, 정산 내역, 권한 관리를 한 곳에서 다루는 운영자 전용 공간입니다.</p>
         </div>
         <div className="auth-product-shot" aria-hidden="true">
           <div className="auth-shot-topbar">
@@ -289,7 +289,7 @@ function AuthFrame({
             <div className="auth-shot-sidebar">
               <span className="active">대시보드</span>
               <span>메뉴 관리</span>
-              <span>주문 탭</span>
+              <span>테이블 목록</span>
               <span>발행 이력</span>
             </div>
             <div className="auth-shot-content">
@@ -331,7 +331,7 @@ function AuthFrame({
           </li>
           <li>
             <strong>주문 운영</strong>
-            <span>탭 생성부터 정산까지 추적</span>
+            <span>테이블 생성부터 정산까지 추적</span>
           </li>
           <li>
             <strong>고객 메뉴판</strong>

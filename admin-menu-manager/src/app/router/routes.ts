@@ -33,9 +33,13 @@ export const adminRoutes: AdminRoute[] = foundationRoutes.map((route) => ({
                         : route.path === "/bars/{barId}/publications"
                             ? "발행 관리"
                           : route.path === "/bars/{barId}/orders"
-                              ? "주문 운영"
-                            : route.path === "/bars/{barId}/orders/{orderTabId}"
-                                ? "주문 상세"
+                              ? "테이블 운영"
+                            : route.path === "/bars/{barId}/orders/new"
+                                ? "테이블 생성"
+                              : route.path === "/bars/{barId}/orders/{orderTabId}"
+                                  ? "테이블 상세"
+                                : route.path === "/bars/{barId}/settlements"
+                                    ? "정산 내역"
                     : route.path === "/system/users"
                       ? "사용자 관리"
                     : route.path === "/system/audit"
@@ -107,9 +111,19 @@ export function matchAdminRoute(pathname: string): AdminRoute {
     if (ordersRoute) return ordersRoute;
   }
 
+  if (/^\/bars\/[^/]+\/orders\/new$/.test(pathname)) {
+    const orderNewRoute = adminRoutes.find((route) => route.path === "/bars/{barId}/orders/new");
+    if (orderNewRoute) return orderNewRoute;
+  }
+
   if (/^\/bars\/[^/]+\/orders\/[^/]+$/.test(pathname)) {
     const orderDetailRoute = adminRoutes.find((route) => route.path === "/bars/{barId}/orders/{orderTabId}");
     if (orderDetailRoute) return orderDetailRoute;
+  }
+
+  if (/^\/bars\/[^/]+\/settlements$/.test(pathname)) {
+    const settlementsRoute = adminRoutes.find((route) => route.path === "/bars/{barId}/settlements");
+    if (settlementsRoute) return settlementsRoute;
   }
 
   const fallbackRoute = adminRoutes.find((route) => route.path === "/dashboard") ?? adminRoutes[0];

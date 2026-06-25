@@ -379,7 +379,10 @@ export function BarDetailPage({ barId, navigate }: { barId: string; navigate: Na
               발행<span>이력·복구</span>
             </button>
             <button className="button secondary" type="button" onClick={() => navigate(`/bars/${bar.id}/orders`)}>
-              주문 탭<span>주문·정산</span>
+              테이블 목록<span>주문 추가·계산 요청</span>
+            </button>
+            <button className="button secondary" type="button" onClick={() => navigate(`/bars/${bar.id}/settlements`)}>
+              정산 내역<span>정산 완료 조회</span>
             </button>
             <button className="button secondary" type="button" onClick={() => navigate(`/bars/${bar.id}/settings`)}>
               바 설정<span>영업시간·주소·링크</span>

@@ -276,13 +276,13 @@ export function AuditPage({ navigate }: { navigate: Navigate }) {
           </div>
         </div>
         <div className="audit-retention-grid">
-          <RetentionMetric label="정리 대상 주문 탭" value={state.data.maintenance.preview.closedCancelledOrderTabs} />
+          <RetentionMetric label="정리 대상 테이블 기록" value={state.data.maintenance.preview.closedCancelledOrderTabs} />
           <RetentionMetric label="정리 대상 일별 요약" value={state.data.maintenance.preview.dailyOrderSummaries} />
           <RetentionMetric label="초과 발행 이력" value={state.data.maintenance.preview.publicationHistoryOverflow} />
           <RetentionMetric label="마지막 실행" value={state.data.maintenance.lastRun ? formatDateTime(state.data.maintenance.lastRun.finishedAt) : "없음"} />
         </div>
         <p className="muted-text">
-          주문 탭 기준 {formatDateTime(state.data.maintenance.preview.orderTerminalCutoff)} 이전 정산 완료·취소, 일별 요약 기준{" "}
+          테이블 기준 {formatDateTime(state.data.maintenance.preview.orderTerminalCutoff)} 이전 정산 완료·취소, 일별 요약 기준{" "}
           {state.data.maintenance.preview.dailySummaryCutoffDate} 이전 데이터만 대상입니다.
         </p>
         {maintenance.status === "running" ? (

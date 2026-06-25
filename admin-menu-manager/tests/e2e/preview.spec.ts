@@ -135,7 +135,8 @@ test("D13 shell bar selector and role based sidebar", async ({ page }) => {
   await expect(sidebar.getByText("메뉴 관리", { exact: true })).toHaveCount(0);
   await expect(sidebar.getByText("시스템 관리", { exact: true })).toHaveCount(0);
   await expect(sidebar.getByRole("link", { name: /메뉴판 미리보기/ })).toBeVisible();
-  await expect(sidebar.getByRole("link", { name: /주문 탭/ })).toBeVisible();
+  await expect(sidebar.getByRole("link", { name: /테이블 목록/ })).toBeVisible();
+  await expect(sidebar.getByRole("link", { name: /정산 내역/ })).toBeVisible();
   await expect(sidebar.getByRole("link", { name: "메뉴", exact: true })).toHaveCount(0);
   await expect(sidebar.getByRole("link", { name: /바 회원/ })).toHaveCount(0);
   await expect(sidebar.getByRole("link", { name: /사용자 계정/ })).toHaveCount(0);
@@ -158,7 +159,8 @@ test("D13 manager can switch bars and open permitted menu areas", async ({ page 
   await expect(sidebar.getByText("시스템 관리", { exact: true })).toHaveCount(0);
   await expect(sidebar.getByRole("link", { name: /카테고리/ })).toBeVisible();
   await expect(sidebar.getByRole("link", { name: "메뉴", exact: true })).toBeVisible();
-  await expect(sidebar.getByRole("link", { name: /주문 탭/ })).toBeVisible();
+  await expect(sidebar.getByRole("link", { name: /테이블 목록/ })).toBeVisible();
+  await expect(sidebar.getByRole("link", { name: /정산 내역/ })).toBeVisible();
   await expect(sidebar.getByRole("link", { name: /사용자 계정/ })).toHaveCount(0);
 
   await sidebar.getByRole("link", { name: /카테고리/ }).click();

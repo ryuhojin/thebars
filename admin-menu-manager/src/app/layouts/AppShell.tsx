@@ -225,7 +225,6 @@ function buildNavGroups(
   add("home", "/dashboard");
   if (isSystemAdmin) {
     add("bar", "/bars");
-    add("bar", "/bars/new");
     add("system", "/system/users");
     add("system", "/system/audit");
   }
@@ -239,7 +238,10 @@ function buildNavGroups(
     if (canEditMenu) add("catalog", "/bars/{barId}/menus", `${barPrefix}/menus`);
     add("publication", "/bars/{barId}/preview", `${barPrefix}/preview`);
     if (canPublish) add("publication", "/bars/{barId}/publications", `${barPrefix}/publications`);
-    if (canManageOrders) add("orders", "/bars/{barId}/orders", `${barPrefix}/orders`);
+    if (canManageOrders) {
+      add("orders", "/bars/{barId}/orders", `${barPrefix}/orders`);
+      add("orders", "/bars/{barId}/settlements", `${barPrefix}/settlements`);
+    }
   } else if (activePath.startsWith("/bars/{barId}")) {
     add(groupKeyForPath(activePath), activePath, window.location.pathname);
   }
@@ -253,7 +255,7 @@ function buildNavGroups(
 }
 
 function groupKeyForPath(path: string): NavGroup["key"] {
-  if (path.includes("/orders")) return "orders";
+  if (path.includes("/orders") || path.includes("/settlements")) return "orders";
   if (path.includes("/preview") || path.includes("/publications")) return "publication";
   if (path.includes("/categories") || path.includes("/menus") || path.includes("/item-types") || path.includes("/badges")) return "catalog";
   if (path.startsWith("/system")) return "system";
@@ -289,7 +291,14 @@ function roleLabel(role: DashboardBar["role"]): string {
 function isActiveNavItem(activePath: string, itemPath: string): boolean {
   if (itemPath === activePath) return true;
   if (itemPath === "/bars/{barId}/orders") {
-    return activePath === "/bars/{barId}/orders" || activePath === "/bars/{barId}/orders/{orderTabId}";
+    return (
+      activePath === "/bars/{barId}/orders" ||
+      activePath === "/bars/{barId}/orders/new" ||
+      activePath === "/bars/{barId}/orders/{orderTabId}"
+    );
+  }
+  if (itemPath === "/bars/{barId}/settlements") {
+    return activePath === "/bars/{barId}/settlements";
   }
   if (itemPath === "/bars/{barId}/menus") {
     return (
@@ -310,7 +319,9 @@ function isActiveNavItem(activePath: string, itemPath: string): boolean {
       activePath === "/bars/{barId}/preview" ||
       activePath === "/bars/{barId}/publications" ||
       activePath === "/bars/{barId}/orders" ||
-      activePath === "/bars/{barId}/orders/{orderTabId}")
+      activePath === "/bars/{barId}/orders/new" ||
+      activePath === "/bars/{barId}/orders/{orderTabId}" ||
+      activePath === "/bars/{barId}/settlements")
   );
 }
 

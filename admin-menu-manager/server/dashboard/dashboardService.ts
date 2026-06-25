@@ -136,7 +136,7 @@ function systemAdminMetrics(
     },
     {
       id: "orders-open",
-      label: "열린 주문 탭",
+      label: "열린 테이블",
       value: "-",
       status: "unavailable",
       tone: "neutral",
@@ -169,7 +169,7 @@ function barUserMetrics(accessibleBarCount: number): DashboardMetric[] {
     },
     {
       id: "orders-open",
-      label: "열린 주문 탭",
+      label: "열린 테이블",
       value: "-",
       status: "unavailable",
       tone: "neutral",
@@ -212,7 +212,7 @@ function barUserActions(selectedBarId: string | null): DashboardQuickAction[] {
   return [
     {
       id: "orders",
-      label: "주문 탭 보기",
+      label: "테이블 목록 보기",
       href: selectedBarId ? `/bars/${selectedBarId}/orders` : "/dashboard",
       priority: "primary",
       status: selectedBarId ? "available" : "unavailable",

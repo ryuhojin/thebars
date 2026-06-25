@@ -40,8 +40,10 @@ const groups = [
   {
     name: "주문과 정산",
     screens: [
-      screen("orders", "WF-19", "D18", "주문 탭 보드", "/bars/{barId}/orders", "주문 운영 권한 사용자", "현재 손님·테이블 탭과 계산 요청을 빠르게 찾고 생성한다.", ["탭 생성", "상태 필터", "손님 설명 검색", "계산 요청 우선 확인", "탭 상세 이동"], ["열린 탭 없음", "중복 테이블 라벨 허용", "계산 요청", "동기화 오류"], "wide는 보드/테이블, compact는 상태별 카드와 하단 새 탭 버튼을 사용한다.", "주문 데이터는 public JSON에 포함하지 않는다. 열린 탭 수는 server aggregate를 사용한다."),
-      screen("order-detail", "WF-20", "D19·D20·D21", "주문 탭 상세·정산", "/bars/{barId}/orders/{orderTabId}", "주문 운영 권한 사용자", "메뉴 주문을 기록하고 합계를 확인해 계좌이체 정산을 마친다.", ["메뉴 검색·추가", "수량 변경·void", "기타 항목·금액 조정", "계산 요청", "정산 완료·취소"], ["409 version 충돌", "중복 idempotency", "closed/cancelled 읽기 전용", "권한 없는 조정", "입금 확인 전"], "wide는 주문 라인과 메뉴 선택/합계를 분할하고 compact는 단계형 목록·추가 sheet·하단 합계 액션을 사용한다.", "가격·이름·용량·통화는 주문 추가 시 snapshot 저장한다. 합계를 클라이언트 값으로 확정하지 않는다."),
+      screen("orders", "WF-19", "D18", "테이블 목록", "/bars/{barId}/orders", "주문 운영 권한 사용자", "현재 손님·테이블 주문 기록과 계산 요청을 빠르게 찾고 생성 화면으로 이동한다.", ["테이블 생성 화면 이동", "상태 필터", "손님 설명 검색", "계산 요청 우선 확인", "테이블 상세 이동"], ["열린 테이블 없음", "중복 테이블 라벨 허용", "계산 요청", "동기화 오류"], "wide는 보드/테이블, compact는 상태별 카드와 하단 테이블 생성 버튼을 사용한다.", "목록 화면 안에 생성 폼이나 상세 패널을 섞지 않는다. 주문 데이터는 public JSON에 포함하지 않는다."),
+      screen("order-new", "WF-19", "D18", "테이블 생성", "/bars/{barId}/orders/new", "주문 운영 권한 사용자", "새 테이블 주문 기록을 만든 뒤 목록으로 돌아가 생성 결과를 확인한다.", ["테이블 라벨 입력", "손님 설명 입력", "생성", "목록으로 돌아가기"], ["입력 오류", "생성 중", "권한 없음", "생성 후 목록 표시"], "모든 폭에서 단일 생성 폼을 사용하며 compact에서도 44px 액션을 유지한다.", "생성은 기존 order-tab API를 사용하고 생성 화면은 목록·상세와 분리한다."),
+      screen("order-detail", "WF-20", "D19·D20·D21", "테이블 상세·정산", "/bars/{barId}/orders/{orderTabId}", "주문 운영 권한 사용자", "메뉴 주문을 기록하고 합계를 확인해 계좌이체 정산을 마친다.", ["주문 편집 탭", "메뉴 검색·추가", "수량 변경·void", "기타 항목·금액 조정", "결제·정산 탭", "정산 완료·취소"], ["409 version 충돌", "중복 idempotency", "closed/cancelled 읽기 전용", "권한 없는 조정", "입금 확인 전"], "wide와 compact 모두 같은 상세 URL 안에서 주문 편집과 결제·정산 탭을 분리한다.", "가격·이름·용량·통화는 주문 추가 시 snapshot 저장한다. 합계를 클라이언트 값으로 확정하지 않는다."),
+      screen("settlements", "WF-20", "D21", "정산 내역", "/bars/{barId}/settlements", "주문 운영 권한 사용자", "정산 완료된 테이블만 조회한다.", ["정산 완료 검색", "최종 합계 확인", "정산 시각 확인"], ["정산 완료 없음", "조회 오류", "권한 없음"], "wide는 정산 테이블, compact는 정산 카드 목록을 사용한다.", "열린 테이블 생성·메뉴 추가·정산 전이 액션은 이 화면에 두지 않는다."),
       screen("audit", "WF-21", "D22", "감사 로그·운영 도구", "/system/audit", "시스템 관리자", "중요 변경과 장애를 검색하고 보관 작업을 확인한다.", ["actor·bar·action·기간 필터", "request ID 조회", "세부 metadata 확인", "보관 작업 상태 확인"], ["로그 없음", "민감값 마스킹", "보관 실패", "대량 결과"], "wide 테이블은 compact 이벤트 카드와 상세 sheet로 변환한다.", "토큰·비밀번호·세션 원문을 기록하지 않는다. metadata는 허용 목록 기반으로 직렬화한다.")
     ]
   },
@@ -235,7 +237,7 @@ const renderers = {
   dashboard: () => appShell("대시보드", `
     <div class="wf-grid cols-4">
       ${statCard("운영 중 바", "2", "전체 2개")}
-      ${statCard("열린 주문 탭", "7", "계산 요청 2건")}
+      ${statCard("열린 테이블", "7", "계산 요청 2건")}
       ${statCard("미발행 변경", "1", "Sample Bar")}
       ${statCard("발행 주의", "1", "배포 확인 불가")}
     </div>
@@ -251,7 +253,7 @@ const renderers = {
       <section class="wf-card">
         <div class="wf-section-header"><h4>빠른 작업</h4></div>
         <div class="wf-grid cols-2">
-          ${button("새 주문 탭", "primary", "orders")}
+          ${button("테이블 생성", "primary", "orders")}
           ${button("메뉴 품절 처리", "", "menus")}
           ${button("메뉴판 발행", "", "publications")}
           ${button("바 등록", "", "bar-new")}
@@ -263,7 +265,7 @@ const renderers = {
       <div class="wf-section-header"><h4>최근 활동</h4>${button("감사 로그", "ghost", "audit")}</div>
       ${activityTable()}
     </section>
-  `, "dashboard", button("새 주문 탭", "primary", "orders")),
+  `, "dashboard", button("테이블 생성", "primary", "orders")),
 
   bars: () => appShell("바 관리", `
     <div class="wf-toolbar">
@@ -306,7 +308,7 @@ const renderers = {
     </div>
     <div class="wf-grid cols-3 wf-section">
       ${overviewLink("메뉴 관리", "검색·품절·가격·상세 정보", "menus")}
-      ${overviewLink("주문·정산", "열린 탭과 계좌이체 정산", "orders")}
+      ${overviewLink("주문·정산", "열린 테이블과 계좌이체 정산", "orders")}
       ${overviewLink("발행 관리", "미리보기·배포·이력·복구", "publications")}
       ${overviewLink("바 회원", "오너·매니저·직원 권한", "members")}
       ${overviewLink("바 기본 정보", "영업시간·주소·링크·통화", "bar-settings")}
@@ -475,11 +477,11 @@ const renderers = {
     </section>
   `, "menus", `${button("미리보기", "", "preview")}${button("발행", "primary")}`),
 
-  orders: () => appShell("주문 탭", `
+  orders: () => appShell("테이블 목록", `
     <div class="wf-grid cols-4">
-      ${statCard("열린 탭", "7", "현재 영업")}${statCard("계산 요청", "2", "우선 처리")}${statCard("오늘 정산", "₩486,000", "정산 11건")}${statCard("취소", "1", "사유 기록됨")}
+      ${statCard("열린 테이블", "7", "현재 영업")}${statCard("계산 요청", "2", "우선 처리")}${statCard("전체 테이블", "9", "조회 결과")}${statCard("정산 내역", "별도 화면", "완료 건만 조회")}
     </div>
-    <div class="wf-tabs wf-section"><button class="wf-tab is-active">열림 7</button><button class="wf-tab">계산 요청 2</button><button class="wf-tab">정산 완료</button><button class="wf-tab">취소</button></div>
+    <div class="wf-tabs wf-section"><button class="wf-tab is-active">열림 7</button><button class="wf-tab">계산 요청 2</button><button class="wf-tab">전체</button><button class="wf-tab">취소</button></div>
     <div class="wf-toolbar"><input class="wf-search" placeholder="테이블·손님 설명 검색"/><select class="wf-select"><option>최근 수정순</option></select></div>
     <div class="wf-grid cols-3">
       ${orderCard("B3", "남녀 2명 · 창가", "42,000원", "계산 요청", "warning")}
@@ -487,10 +489,22 @@ const renderers = {
       ${orderCard("A1", "4명 · 생일", "128,000원", "주문 중", "success")}
       ${orderCard("T5", "남자 3명", "72,000원", "주문 중", "success")}
     </div>
-    <div class="wf-sticky-actions">${button("새 주문 탭", "primary")}</div>
-  `, "orders", button("새 주문 탭", "primary")),
+    <div class="wf-sticky-actions">${button("테이블 생성", "primary", "order-new")}</div>
+  `, "orders", button("테이블 생성", "primary", "order-new")),
 
-  "order-detail": () => appShell("B3 주문 탭", `
+  "order-new": () => appShell("테이블 생성", `
+    <section class="wf-card">
+      <div class="wf-section-header"><div><h4>새 테이블</h4><p>테이블 라벨과 손님 설명으로 주문 기록을 시작합니다.</p></div><button class="wf-button" data-nav="orders">목록</button></div>
+      <div class="wf-form-grid">
+        ${input("테이블 라벨", "예: A1, Bar 3", { value: "B7" })}
+        ${input("손님 설명", "예: 2명, 창가, 단골", { full: true, value: "2명 · 창가" })}
+      </div>
+      <div class="wf-actions">${button("취소", "", "orders")}${button("테이블 생성", "primary", "orders")}</div>
+    </section>
+  `, "orders", button("테이블 생성", "primary", "orders")),
+
+  "order-detail": () => appShell("B3 테이블", `
+    <div class="wf-tabs wf-section"><button class="wf-tab is-active">주문 편집</button><button class="wf-tab">결제·정산</button></div>
     <div class="wf-grid cols-2">
       <section class="wf-card">
         <div class="wf-section-header"><div><h4>B3 · 남녀 2명, 창가</h4><p>18:32 생성 · owner01</p></div>${statusBadge("계산 요청", "warning")}</div>
@@ -506,11 +520,24 @@ const renderers = {
         <div class="wf-list"><div class="wf-list-item"><span>메뉴 합계</span><strong>42,000원</strong></div><div class="wf-list-item"><span>조정</span><strong>-5,000원</strong></div></div>
         <div class="wf-summary-bar" style="margin-top:12px"><span>최종 금액</span><strong>37,000원</strong></div>
         <div class="wf-callout" style="margin-top:12px"><div><strong>계좌이체 확인 후</strong> 정산 완료를 누르세요. 이 기능은 결제를 처리하지 않습니다.</div></div>
-        <div class="wf-form" style="margin-top:12px">${button("계산 요청 취소")}${button("입금 확인 · 정산 완료", "primary")}${button("주문 탭 취소", "danger")}</div>
+        <div class="wf-form" style="margin-top:12px">${button("계산 요청 취소")}${button("입금 확인 · 정산 완료", "primary")}${button("테이블 취소", "danger")}</div>
       </aside>
     </div>
-    <div class="wf-sticky-actions"><div><small>최종 금액</small><strong>37,000원</strong></div>${button("정산 완료", "primary")}</div>
+    <details class="wf-card" style="margin-top:12px"><summary><strong>변경 히스토리</strong> · 3건</summary></details>
   `, "orders", button("메뉴 추가", "primary")),
+
+  settlements: () => appShell("정산 내역", `
+    <div class="wf-grid cols-2">
+      ${statCard("오늘 정산", "486,000원", "완료 11건")}
+      ${statCard("현재 조회", "11건", "정산 완료만")}
+    </div>
+    <div class="wf-toolbar"><input class="wf-search" placeholder="테이블·손님 설명 검색"/><button class="wf-button" data-nav="orders">테이블 목록</button></div>
+    <table class="wf-table"><thead><tr><th>번호</th><th>테이블</th><th>최종 합계</th><th>정산 시각</th><th>항목</th></tr></thead><tbody>
+      <tr><td>B2</td><td>바 좌석 2 · 혼자</td><td>58,000원</td><td>오늘 21:10</td><td>3개</td></tr>
+      <tr><td>A1</td><td>4명 · 생일</td><td>128,000원</td><td>오늘 20:42</td><td>7개</td></tr>
+      <tr><td>T5</td><td>남자 3명</td><td>72,000원</td><td>오늘 19:55</td><td>4개</td></tr>
+    </tbody></table>
+  `, "orders"),
 
   audit: () => appShell("감사 로그", `
     <div class="wf-toolbar"><input class="wf-search" placeholder="actor·request ID 검색"/><select class="wf-select"><option>전체 작업</option></select><select class="wf-select"><option>전체 바</option></select><button class="wf-button">기간</button></div>

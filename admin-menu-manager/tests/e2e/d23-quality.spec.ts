@@ -117,6 +117,7 @@ for (const viewport of viewports) {
     const barId = await readSampleBarId(page);
     const menuItemId = await readFirstMenuItemId(page, barId);
     const orderTabId = await readFirstOrderTabId(page, barId);
+    await expect(page.locator(".sidebar").getByRole("link", { name: "바 등록" })).toHaveCount(0);
 
     const accessibleBarIds = new Set((await readBars(page)).map((bar) => bar.id));
     const routes = [
@@ -132,8 +133,10 @@ for (const viewport of viewports) {
       { path: `/bars/${barId}/menus/${menuItemId}`, label: "메뉴 상세", selectedBarId: barId },
       { path: `/bars/${barId}/preview`, label: "메뉴판 미리보기", selectedBarId: barId },
       { path: `/bars/${barId}/publications`, label: "GitHub 발행", selectedBarId: barId },
-      { path: `/bars/${barId}/orders`, label: "주문 탭", selectedBarId: barId },
-      { path: `/bars/${barId}/orders/${orderTabId}`, label: "주문 탭 상세", selectedBarId: barId },
+      { path: `/bars/${barId}/orders`, label: "테이블 목록", selectedBarId: barId },
+      { path: `/bars/${barId}/orders/new`, label: "테이블 생성", selectedBarId: barId },
+      { path: `/bars/${barId}/orders/${orderTabId}`, label: "테이블 상세", selectedBarId: barId },
+      { path: `/bars/${barId}/settlements`, label: "정산 내역", selectedBarId: barId },
       { path: "/system/users", label: "사용자 계정" },
       { path: "/system/audit", label: "감사 로그·보관" },
       { path: "/system/item-types", label: "품목 유형·템플릿" },
@@ -241,7 +244,8 @@ test("D23 staff sidebar exposes only permitted menus", async ({ page }) => {
   await expect(sidebar.getByText("메뉴 관리", { exact: true })).toHaveCount(0);
   await expect(sidebar.getByText("시스템 관리", { exact: true })).toHaveCount(0);
   await expect(sidebar.getByRole("link", { name: /메뉴판 미리보기/ })).toBeVisible();
-  await expect(sidebar.getByRole("link", { name: /주문 탭/ })).toBeVisible();
+  await expect(sidebar.getByRole("link", { name: /테이블 목록/ })).toBeVisible();
+  await expect(sidebar.getByRole("link", { name: /정산 내역/ })).toBeVisible();
   await expect(sidebar.getByRole("link", { name: /카테고리/ })).toHaveCount(0);
   await expect(sidebar.getByRole("link", { name: "메뉴", exact: true })).toHaveCount(0);
   await expect(sidebar.getByRole("link", { name: /바 회원/ })).toHaveCount(0);
@@ -249,14 +253,16 @@ test("D23 staff sidebar exposes only permitted menus", async ({ page }) => {
 
   await page.setViewportSize({ width: 768, height: 1024 });
   await expect(sidebar.locator(".nav-group-label").first()).toHaveText("주문 운영");
-  await expect(sidebar.getByRole("link", { name: /주문 탭/ })).toBeVisible();
+  await expect(sidebar.getByRole("link", { name: /테이블 목록/ })).toBeVisible();
+  await expect(sidebar.getByRole("link", { name: /정산 내역/ })).toBeVisible();
 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByLabel("내비게이션 열기").click();
   const drawer = page.getByRole("navigation", { name: "Compact 관리자 주요 메뉴" });
   await expect(drawer).toBeVisible();
   await expect(drawer.locator(".nav-group-label").first()).toHaveText("주문 운영");
-  await expect(drawer.getByRole("link", { name: /주문 탭/ })).toBeVisible();
+  await expect(drawer.getByRole("link", { name: /테이블 목록/ })).toBeVisible();
+  await expect(drawer.getByRole("link", { name: /정산 내역/ })).toBeVisible();
 });
 
 function escapeRegExp(value: string): string {
