@@ -1,4 +1,6 @@
 import type {
+  BulkCreateMenuItemsRequest,
+  BulkCreateMenuItemsResponse,
   BulkUpdateMenuItemsRequest,
   BulkUpdateMenuItemsResponse,
   CreateMenuItemRequest,
@@ -40,6 +42,13 @@ export async function bulkUpdateMenuItems(
   payload: BulkUpdateMenuItemsRequest
 ): Promise<BulkUpdateMenuItemsResponse> {
   return postJson(`/api/bars/${encodeURIComponent(barId)}/menu-items/bulk`, payload);
+}
+
+export async function bulkCreateMenuItems(
+  barId: string,
+  payload: BulkCreateMenuItemsRequest
+): Promise<BulkCreateMenuItemsResponse> {
+  return postJson(`/api/bars/${encodeURIComponent(barId)}/menu-items/bulk-create`, payload);
 }
 
 async function getJson<T>(path: string): Promise<T> {

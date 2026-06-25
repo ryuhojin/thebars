@@ -321,6 +321,32 @@ export const createMenuItemRequestSchema = z.object({
   internalMemo: menuInternalMemoSchema.optional()
 });
 
+export const bulkCreateMenuItemDraftSchema = z.object({
+  clientDraftId: z.string().trim().min(1).max(80),
+  menuItem: createMenuItemRequestSchema
+});
+
+export const bulkCreateMenuItemsRequestSchema = z.object({
+  expectedCount: z.number().int().positive(),
+  drafts: z.array(bulkCreateMenuItemDraftSchema).min(1, "저장할 신규 메뉴 초안이 없습니다.").max(50, "한 번에 최대 50개까지 저장할 수 있습니다.")
+}).superRefine((input, context) => {
+  const uniqueIds = new Set(input.drafts.map((draft) => draft.clientDraftId));
+  if (uniqueIds.size !== input.drafts.length) {
+    context.addIssue({ code: "custom", path: ["drafts"], message: "같은 초안이 중복 포함되었습니다." });
+  }
+});
+
+export const bulkCreateMenuItemsResponseSchema = menuItemsResponseSchema.extend({
+  bulk: z.object({
+    impactCount: z.number().int().nonnegative(),
+    created: z.array(z.object({
+      clientDraftId: z.string().min(1),
+      menuItemId: z.string().min(1),
+      name: z.string().min(1)
+    }))
+  })
+});
+
 export const updateMenuItemRequestSchema = z.object({
   categoryId: z.string().min(1, "카테고리를 선택하세요."),
   name: menuNameSchema,
@@ -356,6 +382,9 @@ export type BulkMenuItemChange = z.infer<typeof bulkMenuItemChangeSchema>;
 export type BulkUpdateMenuItemsRequest = z.infer<typeof bulkUpdateMenuItemsRequestSchema>;
 export type BulkUpdateMenuItemsResponse = z.infer<typeof bulkUpdateMenuItemsResponseSchema>;
 export type CreateMenuItemRequest = z.infer<typeof createMenuItemRequestSchema>;
+export type BulkCreateMenuItemDraft = z.infer<typeof bulkCreateMenuItemDraftSchema>;
+export type BulkCreateMenuItemsRequest = z.infer<typeof bulkCreateMenuItemsRequestSchema>;
+export type BulkCreateMenuItemsResponse = z.infer<typeof bulkCreateMenuItemsResponseSchema>;
 export type UpdateMenuItemRequest = z.infer<typeof updateMenuItemRequestSchema>;
 
 export function normalizeMenuName(value: string): string {

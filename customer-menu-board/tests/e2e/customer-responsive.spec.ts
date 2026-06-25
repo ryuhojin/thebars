@@ -64,7 +64,10 @@ const bookMenuFixture = {
               description: "셰리 오크, 건과일, 스파이스",
               soldOut: false,
               abv: 40,
-              prices: [{ label: "샷", volumeText: "30ml", amountMinor: 18000, currency: "KRW" }],
+              prices: [
+                { label: "샷", volumeText: "30ml", amountMinor: 18000, currency: "KRW" },
+                { label: "보틀", volumeText: "700ml", amountMinor: 280000, currency: "KRW" }
+              ],
               badges: [],
               fields: [{ label: "지역", value: "Speyside" }]
             },
@@ -120,11 +123,18 @@ for (const viewport of viewports) {
     await page.getByLabel("메뉴 검색").fill("맥");
     const whiskyRow = page.locator(".book-menu-row", { hasText: "맥캘란 12" });
     await expect(whiskyRow).toBeVisible();
+    await expect(whiskyRow.locator("b", { hasText: "18,000" })).toBeVisible();
+    await expect(whiskyRow.getByText("34,000")).toHaveCount(0);
     await whiskyRow.getByRole("button", { name: /맥캘란 12 상세 보기/ }).click();
     const detailDialog = page.getByRole("dialog", { name: "맥캘란 12" });
     await expect(detailDialog).toBeVisible();
+    await expect(detailDialog.getByText("샷 · 30ml")).toBeVisible();
+    await expect(detailDialog.getByText("18,000 KRW")).toBeVisible();
+    await expect(detailDialog.getByText("더블 · 60ml")).toBeVisible();
+    await expect(detailDialog.getByText("34,000 KRW")).toBeVisible();
     await expect(detailDialog.getByText("지역")).toBeVisible();
     await expect(detailDialog.getByText("Speyside")).toBeVisible();
+    await expect(whiskyRow.getByText("더블")).toHaveCount(0);
     await expect(whiskyRow.getByText("Speyside")).toHaveCount(0);
     await detailDialog.getByRole("button", { name: "닫기" }).click();
 
@@ -191,10 +201,17 @@ for (const viewport of bookViewports) {
     await page.getByLabel("메뉴 검색").fill("맥");
     const macallanRow = page.locator(".book-menu-row", { hasText: "맥캘란 12" });
     await expect(macallanRow).toBeVisible();
+    await expect(macallanRow.locator("b", { hasText: "18,000" })).toBeVisible();
+    await expect(macallanRow.getByText("280,000")).toHaveCount(0);
     await macallanRow.getByRole("button", { name: /맥캘란 12 상세 보기/ }).click();
     const itemDialog = page.getByRole("dialog", { name: "맥캘란 12" });
     await expect(itemDialog).toBeVisible();
+    await expect(itemDialog.getByText("샷 · 30ml")).toBeVisible();
+    await expect(itemDialog.getByText("18,000 KRW")).toBeVisible();
+    await expect(itemDialog.getByText("보틀 · 700ml")).toBeVisible();
+    await expect(itemDialog.getByText("280,000 KRW")).toBeVisible();
     await expect(itemDialog.getByText("Speyside")).toBeVisible();
+    await expect(macallanRow.getByText("보틀")).toHaveCount(0);
     await expect(macallanRow.getByText("Speyside")).toHaveCount(0);
     await itemDialog.getByRole("button", { name: "닫기" }).click();
 

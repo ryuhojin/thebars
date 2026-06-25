@@ -1,4 +1,6 @@
 import type {
+  BulkCreateMenuItemsRequest,
+  BulkCreateMenuItemsResponse,
   BulkUpdateMenuItemsRequest,
   BulkUpdateMenuItemsResponse,
   CreateMenuItemRequest,
@@ -18,6 +20,7 @@ import type {
   UpdateMenuItemRequest
 } from "../../contracts/menuItems";
 import {
+  bulkCreateMenuItemsResponseSchema,
   menuItemDetailResponseSchema,
   menuItemDetailsSchema,
   menuItemsResponseSchema,
@@ -71,6 +74,11 @@ type ItemTypeResolution = ItemTypeIds & {
   template: ItemTemplate;
 };
 
+type CreatedMenuItemResult = {
+  clientDraftId?: string;
+  item: MenuItemRecord;
+};
+
 export class MenuItemService {
   private readonly now: () => Date;
 
@@ -102,49 +110,50 @@ export class MenuItemService {
 
   async createMenuItem(actor: AuthUserRecord, barId: string, input: CreateMenuItemRequest): Promise<MenuItemDetailResponse> {
     const access = await this.requireCanEditMenu(actor, barId);
-    await this.requireLeafCategory(barId, input.categoryId);
-    const itemType = await this.resolveItemType(barId, input.itemType ?? null);
-    const internalMemo = input.internalMemo ?? "";
-    if (internalMemo && !access.canEditInternalMemo) {
-      throw new AuthServiceError(403, "INTERNAL_MEMO_OWNER_REQUIRED", "내부 메모는 owner 또는 시스템 관리자만 수정할 수 있습니다.");
-    }
     try {
-      const created = await this.repository.createMenuItem({
-        id: crypto.randomUUID(),
-        barId,
-        categoryId: input.categoryId,
-        systemItemTypeId: itemType.systemItemTypeId,
-        barItemTypeId: itemType.barItemTypeId,
-        name: input.name,
-        normalizedName: normalizeMenuName(input.name),
-        description: input.description ?? "",
-        internalMemo,
-        saleStatus: input.saleStatus ?? "available",
-        isVisible: input.isVisible ?? true,
-        abvBasisPoints: toAbvBasisPoints(input.abv ?? null),
-        createdByUserId: actor.id,
-        updatedByUserId: actor.id,
-        now: nowIso(this.now())
-      });
-      const now = nowIso(this.now());
-      if (input.prices !== undefined) {
-        await this.repository.replaceMenuItemPrices(barId, created.id, this.toPriceInputs(input.prices, itemType.template), actor.id, now);
-      }
-      if (input.details) {
-        const details = parseDetailsForTemplate(input.details, itemType.template);
-        await this.repository.upsertMenuItemDetails({
-          barId,
-          menuItemId: created.id,
-          template: itemType.template,
-          details,
-          updatedByUserId: actor.id,
-          now
-        });
-      }
+      const created = await this.createMenuItemRecord(actor, access, input);
       return this.readResponse(access, created.id);
     } catch (error) {
       throw mapRepositoryError(error);
     }
+  }
+
+  async bulkCreateMenuItems(
+    actor: AuthUserRecord,
+    barId: string,
+    input: BulkCreateMenuItemsRequest
+  ): Promise<BulkCreateMenuItemsResponse> {
+    const access = await this.requireCanEditMenu(actor, barId);
+    if (input.drafts.length !== input.expectedCount) {
+      throw new AuthServiceError(409, "BULK_CREATE_IMPACT_MISMATCH", "신규 메뉴 초안 수와 영향 건수가 일치하지 않습니다.", {}, {
+        expectedCount: input.expectedCount,
+        actualCount: input.drafts.length
+      });
+    }
+    await this.rejectDuplicateCreateNames(barId, input.drafts.map((draft) => draft.menuItem.name));
+    const created: CreatedMenuItemResult[] = [];
+    try {
+      for (const draft of input.drafts) {
+        created.push({
+          clientDraftId: draft.clientDraftId,
+          item: await this.createMenuItemRecord(actor, access, draft.menuItem)
+        });
+      }
+    } catch (error) {
+      throw mapRepositoryError(error);
+    }
+    const data = await this.readResponse(access);
+    return bulkCreateMenuItemsResponseSchema.parse({
+      ...data,
+      bulk: {
+        impactCount: created.length,
+        created: created.map((entry) => ({
+          clientDraftId: entry.clientDraftId ?? entry.item.id,
+          menuItemId: entry.item.id,
+          name: entry.item.name
+        }))
+      }
+    });
   }
 
   async updateMenuItem(
@@ -281,14 +290,14 @@ export class MenuItemService {
         left.sortOrder - right.sortOrder ||
         left.name.localeCompare(right.name, "ko")
     );
-    const priceEntries = await Promise.all(
-      sortedItems.map(async (item) => [item.id, await this.repository.listMenuItemPrices(access.bar.id, item.id)] as const)
-    );
-    const badgeEntries = await Promise.all(
-      sortedItems.map(async (item) => [item.id, await this.repository.listMenuItemBadges(access.bar.id, item.id)] as const)
-    );
-    const pricesByItemId = new Map(priceEntries);
-    const badgesByItemId = new Map(badgeEntries);
+    const itemIds = sortedItems.map((item) => item.id);
+    const [prices, badges, usernamesByUserId] = await Promise.all([
+      this.repository.listMenuItemPricesForItems(access.bar.id, itemIds),
+      this.repository.listMenuItemBadgesForItems(access.bar.id, itemIds),
+      this.readUpdatedByUsernames(sortedItems)
+    ]);
+    const pricesByItemId = groupByMenuItemId(prices);
+    const badgesByItemId = groupByMenuItemId(badges);
     const itemDtos = await Promise.all(
       sortedItems.map((item) =>
         this.toDto(
@@ -297,7 +306,8 @@ export class MenuItemService {
           itemTypes,
           pricesByItemId.get(item.id) ?? [],
           badgesByItemId.get(item.id) ?? [],
-          badgeCatalog.byKey
+          badgeCatalog.byKey,
+          item.updatedByUserId ? usernamesByUserId.get(item.updatedByUserId) ?? "알 수 없음" : "알 수 없음"
         )
       )
     );
@@ -363,6 +373,75 @@ export class MenuItemService {
     return category;
   }
 
+  private async createMenuItemRecord(
+    actor: AuthUserRecord,
+    access: BarAccess,
+    input: CreateMenuItemRequest
+  ): Promise<MenuItemRecord> {
+    await this.requireLeafCategory(access.bar.id, input.categoryId);
+    const itemType = await this.resolveItemType(access.bar.id, input.itemType ?? null);
+    const internalMemo = input.internalMemo ?? "";
+    if (internalMemo && !access.canEditInternalMemo) {
+      throw new AuthServiceError(403, "INTERNAL_MEMO_OWNER_REQUIRED", "내부 메모는 owner 또는 시스템 관리자만 수정할 수 있습니다.");
+    }
+    const now = nowIso(this.now());
+    const created = await this.repository.createMenuItem({
+      id: crypto.randomUUID(),
+      barId: access.bar.id,
+      categoryId: input.categoryId,
+      systemItemTypeId: itemType.systemItemTypeId,
+      barItemTypeId: itemType.barItemTypeId,
+      name: input.name,
+      normalizedName: normalizeMenuName(input.name),
+      description: input.description ?? "",
+      internalMemo,
+      saleStatus: input.saleStatus ?? "available",
+      isVisible: input.isVisible ?? true,
+      abvBasisPoints: toAbvBasisPoints(input.abv ?? null),
+      createdByUserId: actor.id,
+      updatedByUserId: actor.id,
+      now
+    });
+    if (input.prices !== undefined) {
+      await this.repository.replaceMenuItemPrices(access.bar.id, created.id, this.toPriceInputs(input.prices, itemType.template), actor.id, now);
+    }
+    if (input.details) {
+      const details = parseDetailsForTemplate(input.details, itemType.template);
+      await this.repository.upsertMenuItemDetails({
+        barId: access.bar.id,
+        menuItemId: created.id,
+        template: itemType.template,
+        details,
+        updatedByUserId: actor.id,
+        now
+      });
+    }
+    return created;
+  }
+
+  private async rejectDuplicateCreateNames(barId: string, names: string[]): Promise<void> {
+    const normalizedNames = names.map(normalizeMenuName);
+    const uniqueNames = new Set(normalizedNames);
+    if (uniqueNames.size !== normalizedNames.length) {
+      throw new AuthServiceError(409, "MENU_NAME_EXISTS", "같은 바에 같은 이름의 메뉴가 이미 있습니다.");
+    }
+    const existingNames = new Set((await this.repository.listMenuItems(barId)).map((item) => item.normalizedName));
+    if (normalizedNames.some((name) => existingNames.has(name))) {
+      throw new AuthServiceError(409, "MENU_NAME_EXISTS", "같은 바에 같은 이름의 메뉴가 이미 있습니다.");
+    }
+  }
+
+  private async readUpdatedByUsernames(items: MenuItemRecord[]): Promise<Map<string, string>> {
+    const userIds = [...new Set(items.map((item) => item.updatedByUserId).filter((id): id is string => Boolean(id)))];
+    const entries = await Promise.all(
+      userIds.map(async (userId) => {
+        const user = await this.authRepository.findUserById(userId);
+        return [userId, user?.normalizedUsername ?? "알 수 없음"] as const;
+      })
+    );
+    return new Map(entries);
+  }
+
   private async resolveItemType(barId: string, selection: MenuItemTypeSelection | null): Promise<ItemTypeResolution> {
     if (!selection) return { systemItemTypeId: null, barItemTypeId: null, template: "general" };
     if (selection.source === "system") {
@@ -402,9 +481,9 @@ export class MenuItemService {
     itemTypeOptions: MenuItemTypeOption[],
     prices: MenuItemPriceRecord[],
     badges: MenuItemBadgeRecord[],
-    badgeByKey: Map<string, MenuBadgeOption>
+    badgeByKey: Map<string, MenuBadgeOption>,
+    updatedByUsername: string
   ): Promise<MenuItem> {
-    const updatedBy = item.updatedByUserId ? await this.authRepository.findUserById(item.updatedByUserId) : null;
     return {
       id: item.id,
       barId: item.barId,
@@ -433,7 +512,7 @@ export class MenuItemService {
         .sort((left, right) => left.displayOrder - right.displayOrder)
         .map((badge) => toAssignedBadgeDto(badge, badgeByKey)),
       sortOrder: item.sortOrder,
-      updatedByUsername: updatedBy?.normalizedUsername ?? "알 수 없음",
+      updatedByUsername,
       createdAt: item.createdAt,
       updatedAt: item.updatedAt
     };
@@ -650,6 +729,16 @@ function filterMenuItems(items: MenuItem[], query: MenuItemListQuery): MenuItem[
       );
     return matchesQuery && matchesCategory && matchesItemType && matchesSaleStatus && matchesVisibility && matchesBadge;
   });
+}
+
+function groupByMenuItemId<T extends { menuItemId: string }>(records: T[]): Map<string, T[]> {
+  const groups = new Map<string, T[]>();
+  for (const record of records) {
+    const group = groups.get(record.menuItemId) ?? [];
+    group.push(record);
+    groups.set(record.menuItemId, group);
+  }
+  return groups;
 }
 
 function toAssignedBadgeDto(badge: MenuItemBadgeRecord, badgeByKey: Map<string, MenuBadgeOption>): MenuItemBadge {

@@ -196,8 +196,8 @@ async function seedPreviewMenu(runtime: PreviewRuntime) {
     abv: 40,
     itemType: { source: "system", id: "system-type-whisky" },
     prices: [
-      { label: "샷", volumeText: "30ml", amountMinor: 18000 },
-      { label: "보틀", volumeText: "700ml", amountMinor: 280000 }
+      { label: "보틀", volumeText: "700ml", amountMinor: 280000 },
+      { label: "샷", volumeText: "30ml", amountMinor: 18000, isRepresentative: true }
     ],
     details: {
       template: "whisky",
@@ -278,10 +278,13 @@ describe("D13 public preview API", () => {
     expect(items.map((item) => item.id)).toEqual(["menu_1", "menu_2"]);
     expect(items[0]).toMatchObject({
       name: "맥캘란 12",
-      prices: [{ label: "샷", volumeText: "30ml", amountMinor: 18000, currency: "KRW" }],
+      prices: [
+        { label: "샷", volumeText: "30ml", amountMinor: 18000, currency: "KRW" },
+        { label: "보틀", volumeText: "700ml", amountMinor: 280000, currency: "KRW" }
+      ],
       badges: [{ label: "추천" }]
     });
-    expect(items[0]?.prices).toHaveLength(1);
+    expect(items[0]?.prices).toHaveLength(2);
     expect(items[0]?.fields).toEqual(expect.arrayContaining([{ label: "브랜드", value: "Macallan" }]));
     expect(items[1]).toMatchObject({
       name: "네그로니",

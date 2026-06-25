@@ -2752,6 +2752,44 @@ code {
   justify-content: flex-end;
 }
 
+.menu-create-drafts-panel {
+  border-color: rgba(13, 118, 104, 0.2);
+}
+
+.menu-create-draft-list {
+  display: grid;
+  gap: 10px;
+}
+
+.menu-create-draft-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(180px, 0.8fr) auto;
+  align-items: center;
+  gap: 14px;
+  padding: 14px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-surface-muted);
+}
+
+.menu-create-draft-card > div:first-child {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.menu-create-draft-card span {
+  color: var(--color-muted);
+}
+
+.menu-create-draft-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 14px;
+  flex-wrap: wrap;
+}
+
 .category-menu-groups {
   display: grid;
   gap: 16px;
@@ -2786,7 +2824,7 @@ code {
 
 .menus-table th:first-child,
 .menus-table td:first-child {
-  width: 48px;
+  width: 150px;
 }
 
 .menus-table th:nth-child(2),
@@ -2794,9 +2832,19 @@ code {
   width: 16%;
 }
 
+.menus-table th:nth-child(3),
+.menus-table td:nth-child(3) {
+  width: 18%;
+}
+
 .menus-table th:nth-child(5),
 .menus-table td:nth-child(5) {
-  width: 22%;
+  width: 20%;
+}
+
+.menus-table th:nth-child(9),
+.menus-table td:nth-child(9) {
+  width: 140px;
 }
 
 .menus-table select,
@@ -2808,6 +2856,13 @@ code {
   border-radius: var(--radius);
   background: var(--color-surface);
   color: var(--color-text);
+}
+
+.menu-actions-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
 
 .menus-table tr[data-dirty="true"],
@@ -3636,6 +3691,10 @@ code {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .menu-create-draft-card {
+    grid-template-columns: 1fr;
+  }
+
   .settings-form-grid,
   .hours-editor,
   .link-row,
@@ -3900,6 +3959,7 @@ code {
   }
 
   .menu-bulk-actions .button,
+  .menu-create-draft-actions .button,
   .card-actions .button {
     flex: 1 1 132px;
   }

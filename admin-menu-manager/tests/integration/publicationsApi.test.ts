@@ -198,7 +198,10 @@ async function createMenuItem(
       name,
       description: "셰리 오크",
       itemType: { source: "system", id: "system-type-whisky" },
-      prices: [{ label: "샷", volumeText: "30ml", amountMinor: 18000 }],
+      prices: [
+        { label: "보틀", volumeText: "700ml", amountMinor: 280000 },
+        { label: "샷", volumeText: "30ml", amountMinor: 18000, isRepresentative: true }
+      ],
       internalMemo: "public 제외"
     },
     cookie,
@@ -318,7 +321,21 @@ describe("D15 publications API", () => {
     });
     expect(runtime.github.commits).toHaveLength(1);
     const file = await runtime.github.readFile(`public/menus/${bar.encodedSlug}.json`);
-    expect(JSON.parse(file?.content ?? "{}")).toMatchObject({ layout: { concept: "menu_book" } });
+    expect(JSON.parse(file?.content ?? "{}")).toMatchObject({
+      layout: { concept: "menu_book" },
+      categories: [
+        {
+          items: [
+            {
+              prices: [
+                { label: "샷", volumeText: "30ml", amountMinor: 18000, currency: "KRW" },
+                { label: "보틀", volumeText: "700ml", amountMinor: 280000, currency: "KRW" }
+              ]
+            }
+          ]
+        }
+      ]
+    });
     expect(file?.content).toContain("\"status\":\"published\"");
     expect(file?.content).toContain("\"revision\":1");
     expect(file?.content).not.toMatch(/internalMemo|public 제외|userId|barId|token|password/);

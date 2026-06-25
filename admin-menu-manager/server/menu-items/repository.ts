@@ -134,6 +134,7 @@ export interface MenuItemRepository {
   updateMenuItem(barId: string, menuItemId: string, input: MenuItemUpdateInput): Promise<MenuItemRecord | null>;
   deleteMenuItem(barId: string, menuItemId: string, updatedByUserId: string, now: string): Promise<boolean>;
   listMenuItemPrices(barId: string, menuItemId: string): Promise<MenuItemPriceRecord[]>;
+  listMenuItemPricesForItems(barId: string, menuItemIds: string[]): Promise<MenuItemPriceRecord[]>;
   replaceMenuItemPrices(
     barId: string,
     menuItemId: string,
@@ -145,6 +146,7 @@ export interface MenuItemRepository {
   upsertMenuItemDetails(input: MenuItemDetailsInput): Promise<MenuItemDetailsRecord>;
   deleteMenuItemDetails(barId: string, menuItemId: string): Promise<void>;
   listMenuItemBadges(barId: string, menuItemId: string): Promise<MenuItemBadgeRecord[]>;
+  listMenuItemBadgesForItems(barId: string, menuItemIds: string[]): Promise<MenuItemBadgeRecord[]>;
   replaceMenuItemBadges(
     barId: string,
     menuItemId: string,

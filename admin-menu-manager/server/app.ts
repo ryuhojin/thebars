@@ -27,6 +27,7 @@ import {
   updateCategoryRequestSchema
 } from "../contracts/categories";
 import {
+  bulkCreateMenuItemsRequestSchema,
   bulkUpdateMenuItemsRequestSchema,
   createMenuItemRequestSchema,
   menuItemListQuerySchema,
@@ -993,6 +994,26 @@ export function createAdminApi(options: AdminApiOptions = {}) {
         { now: options.now, badgeRepository: createBadgeRuntime(context.env, options).repository }
       ).bulkUpdateMenuItems(session.user, context.req.param("barId"), payload);
       return context.json(ok(data, context.get("requestId")));
+    } catch (error) {
+      return authErrorResponse(context, error);
+    }
+  });
+
+  app.post("/bars/:barId/menu-items/bulk-create", async (context) => {
+    try {
+      const runtime = createAuthRuntime(context.env, options);
+      const session = await runtime.service.requireFeatureSession(getSessionCookie(context, runtime), getCsrfHeader(context));
+      const payload = await parseJson(context, bulkCreateMenuItemsRequestSchema);
+      const data = await new MenuItemService(
+        runtime.repository,
+        createBarRuntime(context.env, options).repository,
+        createMembershipRuntime(context.env, options).repository,
+        createCategoryRuntime(context.env, options).repository,
+        createItemTypeRuntime(context.env, options).repository,
+        createMenuItemRuntime(context.env, options).repository,
+        { now: options.now, badgeRepository: createBadgeRuntime(context.env, options).repository }
+      ).bulkCreateMenuItems(session.user, context.req.param("barId"), payload);
+      return context.json(ok(data, context.get("requestId")), 201);
     } catch (error) {
       return authErrorResponse(context, error);
     }

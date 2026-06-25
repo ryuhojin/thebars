@@ -459,7 +459,7 @@ function MenuCard({
         {item.soldOut ? <b>품절</b> : null}
       </button>
       <div className="public-menu-card-detail">
-        <ItemMeta item={item} />
+        <ItemMeta item={item} priceMode="primary" />
         <ItemFieldList item={item} isExpanded={isExpanded} />
       </div>
     </article>
@@ -499,7 +499,8 @@ function DenseMenuRow({
   );
 }
 
-function ItemMeta({ item }: { item: PublicMenuItem }) {
+function ItemMeta({ item, priceMode = "all" }: { item: PublicMenuItem; priceMode?: "all" | "primary" }) {
+  const prices = priceMode === "primary" ? item.prices.slice(0, 1) : item.prices;
   return (
     <>
       {item.abv !== null ? <span className="public-menu-pill">{formatAbv(item.abv)}% ABV</span> : null}
@@ -507,9 +508,9 @@ function ItemMeta({ item }: { item: PublicMenuItem }) {
         <p className="public-soldout-note">품절 메뉴는 가격, 용량, 배지를 공개하지 않습니다.</p>
       ) : (
         <>
-          {item.prices.length > 0 ? (
+          {prices.length > 0 ? (
             <div className="public-price-list" aria-label={`${item.name} 가격`}>
-              {item.prices.map((price) => (
+              {prices.map((price) => (
                 <div className="public-price-row" key={`${item.id}-${price.label}`}>
                   <span>
                     {price.label}

@@ -262,8 +262,7 @@ function toPublicMenuItem(
     abv: item.abvBasisPoints === null ? null : item.abvBasisPoints / 100,
     prices: soldOut
       ? []
-      : representativePublicPrices(prices)
-          .sort((left, right) => left.displayOrder - right.displayOrder || left.label.localeCompare(right.label, "ko"))
+      : publicDisplayPrices(prices)
           .map((price) => ({
             label: price.label,
             volumeText: emptyToUndefined(price.volumeText),
@@ -280,9 +279,13 @@ function toPublicMenuItem(
   };
 }
 
-function representativePublicPrices(prices: MenuItemPriceRecord[]): MenuItemPriceRecord[] {
-  const representative = prices.find((price) => price.isRepresentative);
-  return representative ? [representative] : prices.slice(0, 1);
+function publicDisplayPrices(prices: MenuItemPriceRecord[]): MenuItemPriceRecord[] {
+  return [...prices].sort(
+    (left, right) =>
+      Number(right.isRepresentative) - Number(left.isRepresentative) ||
+      left.displayOrder - right.displayOrder ||
+      left.label.localeCompare(right.label, "ko")
+  );
 }
 
 function toPublicBadge(label: string, color: BadgeColorRecord): PublicMenuBadge {

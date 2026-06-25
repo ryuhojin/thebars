@@ -139,6 +139,15 @@ export class MemoryMenuItemRepository implements MenuItemRepository {
       .map((price) => ({ ...price }));
   }
 
+  async listMenuItemPricesForItems(barId: string, menuItemIds: string[]): Promise<MenuItemPriceRecord[]> {
+    const idSet = new Set(menuItemIds);
+    return [...this.prices.values()]
+      .flat()
+      .filter((price) => price.barId === barId && idSet.has(price.menuItemId))
+      .sort((left, right) => left.menuItemId.localeCompare(right.menuItemId) || left.displayOrder - right.displayOrder || left.label.localeCompare(right.label, "ko"))
+      .map((price) => ({ ...price }));
+  }
+
   async replaceMenuItemPrices(
     barId: string,
     menuItemId: string,
@@ -209,6 +218,15 @@ export class MemoryMenuItemRepository implements MenuItemRepository {
     if (!current || current.barId !== barId) return [];
     return [...(this.badges.get(menuItemId) ?? [])]
       .sort((left, right) => left.displayOrder - right.displayOrder)
+      .map((badge) => ({ ...badge }));
+  }
+
+  async listMenuItemBadgesForItems(barId: string, menuItemIds: string[]): Promise<MenuItemBadgeRecord[]> {
+    const idSet = new Set(menuItemIds);
+    return [...this.badges.values()]
+      .flat()
+      .filter((badge) => badge.barId === barId && idSet.has(badge.menuItemId))
+      .sort((left, right) => left.menuItemId.localeCompare(right.menuItemId) || left.displayOrder - right.displayOrder)
       .map((badge) => ({ ...badge }));
   }
 

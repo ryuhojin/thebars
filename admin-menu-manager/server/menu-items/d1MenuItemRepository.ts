@@ -187,6 +187,20 @@ export class D1MenuItemRepository implements MenuItemRepository {
     return (result.results ?? []).map(toPriceRecord);
   }
 
+  async listMenuItemPricesForItems(barId: string, menuItemIds: string[]): Promise<MenuItemPriceRecord[]> {
+    if (menuItemIds.length === 0) return [];
+    const placeholders = menuItemIds.map(() => "?").join(", ");
+    const result = await this.db
+      .prepare(
+        `SELECT * FROM menu_item_prices
+         WHERE bar_id = ? AND menu_item_id IN (${placeholders})
+         ORDER BY menu_item_id ASC, display_order ASC, label ASC`
+      )
+      .bind(barId, ...menuItemIds)
+      .all<MenuItemPriceRow>();
+    return (result.results ?? []).map(toPriceRecord);
+  }
+
   async replaceMenuItemPrices(
     barId: string,
     menuItemId: string,
@@ -279,6 +293,20 @@ export class D1MenuItemRepository implements MenuItemRepository {
          ORDER BY display_order ASC`
       )
       .bind(barId, menuItemId)
+      .all<MenuItemBadgeRow>();
+    return (result.results ?? []).map(toBadgeRecord);
+  }
+
+  async listMenuItemBadgesForItems(barId: string, menuItemIds: string[]): Promise<MenuItemBadgeRecord[]> {
+    if (menuItemIds.length === 0) return [];
+    const placeholders = menuItemIds.map(() => "?").join(", ");
+    const result = await this.db
+      .prepare(
+        `SELECT * FROM menu_item_badges
+         WHERE bar_id = ? AND menu_item_id IN (${placeholders})
+         ORDER BY menu_item_id ASC, display_order ASC`
+      )
+      .bind(barId, ...menuItemIds)
       .all<MenuItemBadgeRow>();
     return (result.results ?? []).map(toBadgeRecord);
   }

@@ -62,8 +62,33 @@ async function createMenuThroughUi(
   for (let index = 0; index < amountCount; index += 1) {
     await amountFields.nth(index).fill(input.amount);
   }
-  await page.getByRole("button", { name: "저장" }).click();
+  await page.getByRole("button", { name: "초안 저장" }).click();
+  await expect(page.getByText("신규 메뉴 초안을 저장했습니다. 최종 저장을 눌러 D1에 반영하세요.")).toBeVisible();
+  await page.getByRole("button", { name: /최종 저장 1개/ }).click();
   await expect(page).toHaveURL(new RegExp(`/bars/${barId}/menus/(?!new$)[^/]+$`));
+}
+
+async function saveMenuDraftThroughUi(
+  page: Page,
+  input: {
+    name: string;
+    categoryLabel: string;
+    itemTypeLabel: string;
+    priceLabel: string;
+    amount: string;
+  }
+) {
+  await page.getByLabel("메뉴 이름").fill(input.name);
+  await page.getByLabel("메뉴 카테고리").selectOption({ label: input.categoryLabel });
+  await page.getByLabel("품목 유형").selectOption({ label: input.itemTypeLabel });
+  await page.getByLabel("가격 라벨 1").fill(input.priceLabel);
+  const amountFields = page.getByLabel(/가격 금액/);
+  const amountCount = await amountFields.count();
+  for (let index = 0; index < amountCount; index += 1) {
+    await amountFields.nth(index).fill(input.amount);
+  }
+  await page.getByRole("button", { name: "초안 저장" }).click();
+  await expect(page.getByText("신규 메뉴 초안을 저장했습니다. 최종 저장을 눌러 D1에 반영하세요.")).toBeVisible();
 }
 
 async function expectNoHorizontalOverflow(page: Page) {
@@ -120,6 +145,51 @@ test("menu category select follows the managed category order", async ({ page })
   expect(optionLabels).toEqual(["Z Order (상위 카테고리)", "Z Order / C Child", "Z Order / B Child", "A Order"]);
 });
 
+test("bulk final save clears two saved create drafts after menu list reflects them", async ({ page }) => {
+  await page.request.post("/__dev/reset-auth");
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page, "admin1", "AdminPass!1");
+  const barId = await createBarThroughUi(page, "Draft Clear Bar");
+
+  await page.goto(`/bars/${barId}/categories`);
+  await createRootCategory(page, "Draft Clear Category");
+
+  const firstName = "초안 정리 위스키";
+  const secondName = "초안 정리 칵테일";
+  await page.goto(`/bars/${barId}/menus/new`);
+  await saveMenuDraftThroughUi(page, {
+    name: firstName,
+    categoryLabel: "Draft Clear Category",
+    itemTypeLabel: "위스키 · 공통",
+    priceLabel: "샷",
+    amount: "18000"
+  });
+  await expect(page.getByText(`1. ${firstName}`)).toBeVisible();
+  await saveMenuDraftThroughUi(page, {
+    name: secondName,
+    categoryLabel: "Draft Clear Category",
+    itemTypeLabel: "칵테일 · 공통",
+    priceLabel: "잔",
+    amount: "16000"
+  });
+  await expect(page.getByText(/2개 대기/)).toBeVisible();
+  await expect(page.getByText(`2. ${secondName}`)).toBeVisible();
+
+  await page.getByRole("button", { name: /최종 저장 2개/ }).click();
+  await expect(page).toHaveURL(new RegExp(`/bars/${barId}/menus$`));
+  await expect(page.locator(".data-table").getByText(firstName).first()).toBeVisible();
+  await expect(page.locator(".data-table").getByText(secondName).first()).toBeVisible();
+  await expect(
+    page.evaluate((targetBarId) => window.sessionStorage.getItem(`thebar:menu-create-drafts:v1:${targetBarId}`), barId)
+  ).resolves.toBeNull();
+
+  await page.goto(`/bars/${barId}/menus/new`);
+  await expect(page.getByText(/0개 대기/)).toBeVisible();
+  await expect(page.getByText("대기 중인 신규 메뉴 초안이 없습니다.")).toBeVisible();
+  await expect(page.getByText(`1. ${firstName}`)).toHaveCount(0);
+  await expect(page.getByText(`2. ${secondName}`)).toHaveCount(0);
+});
+
 for (const viewport of viewports) {
   test(`D11 menu price detail memo save at ${viewport.label}`, async ({ page }, testInfo) => {
     await page.request.post("/__dev/reset-auth");
@@ -167,7 +237,14 @@ for (const viewport of viewports) {
       fullPage: true
     });
 
-    await page.getByRole("button", { name: "저장" }).click();
+    await page.getByRole("button", { name: "초안 저장" }).click();
+    await expect(page.getByText("신규 메뉴 초안을 저장했습니다. 최종 저장을 눌러 D1에 반영하세요.")).toBeVisible();
+    await expect(page.getByText(`1. 맥캘란 12 ${viewport.label}`)).toBeVisible();
+    await page.reload();
+    await expect(page).toHaveURL(new RegExp(`/bars/${barId}/menus/new$`));
+    await expect(page.getByText(`1. 맥캘란 12 ${viewport.label}`)).toBeVisible();
+    await expect(page.getByText(/1개 대기/)).toBeVisible();
+    await page.getByRole("button", { name: /최종 저장 1개/ }).click();
     await expect(page).toHaveURL(new RegExp(`/bars/${barId}/menus/[^/]+$`));
     await expect(page.getByRole("heading", { name: "메뉴 기본 정보" })).toBeVisible();
     await expect(page.getByLabel("가격 금액 1")).toHaveValue("18000");
@@ -265,6 +342,12 @@ for (const viewport of viewports) {
     await page.goto(`/bars/${barId}/menus`);
     await expect(page).toHaveURL(new RegExp(`/bars/${barId}/menus$`));
     await expect(page.getByRole("heading", { name: "메뉴 관리" })).toBeVisible();
+    if (viewport.width >= 768) {
+      const headers = await page.locator(".menus-table thead th").evaluateAll((cells) =>
+        cells.map((cell) => cell.textContent?.trim() ?? "")
+      );
+      expect(headers).toEqual(["노출순서", "카테고리", "메뉴명", "가격", "배지", "상태", "노출", "수정", "작업"]);
+    }
     await menuSelectionCheckbox(page, macallanName, viewport.width).check();
     await menuSelectionCheckbox(page, negroniName, viewport.width).check();
     await page.getByLabel("일괄 판매 상태").selectOption("sold_out");

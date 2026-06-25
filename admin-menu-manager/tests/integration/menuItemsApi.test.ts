@@ -407,6 +407,110 @@ describe("D10 menu item API", () => {
 });
 
 describe("D11 menu item price, detail, and internal memo API", () => {
+  it("bulk-creates client-side draft menu items in one final save", async () => {
+    const runtime = createRuntime();
+    await seedUser(runtime, "admin1", { isSystemAdmin: true });
+    const admin = await login(runtime, "admin1", "AdminPass!1");
+    const bar = await createBar(runtime, admin.cookie, admin.csrf, "Draft Bulk Bar");
+    const whisky = await createCategory(runtime, bar.id, admin.cookie, admin.csrf, { name: "위스키" });
+    const wine = await createCategory(runtime, bar.id, admin.cookie, admin.csrf, { name: "와인" });
+
+    const unauthenticated = await postJson(runtime.app, `/api/bars/${bar.id}/menu-items/bulk-create`, {
+      expectedCount: 1,
+      drafts: [{ clientDraftId: "draft-unauth", menuItem: { categoryId: whisky.id, name: "미인증 초안" } }]
+    });
+    expect(unauthenticated.status).toBe(401);
+    expect(await readJsonObject(unauthenticated)).toMatchObject({ error: { code: "AUTH_REQUIRED" } });
+
+    const duplicateDrafts = await postJson(
+      runtime.app,
+      `/api/bars/${bar.id}/menu-items/bulk-create`,
+      {
+        expectedCount: 2,
+        drafts: [
+          { clientDraftId: "draft-a", menuItem: { categoryId: whisky.id, name: "중복 메뉴" } },
+          { clientDraftId: "draft-b", menuItem: { categoryId: wine.id, name: " 중복   메뉴 " } }
+        ]
+      },
+      admin.cookie,
+      admin.csrf
+    );
+    expect(duplicateDrafts.status).toBe(409);
+    expect(await readJsonObject(duplicateDrafts)).toMatchObject({ error: { code: "MENU_NAME_EXISTS" } });
+
+    const emptyAfterDuplicate = await runtime.app.request(`/api/bars/${bar.id}/menu-items`, { headers: { cookie: admin.cookie } });
+    expect(emptyAfterDuplicate.status).toBe(200);
+    expect(await readJsonObject(emptyAfterDuplicate)).toMatchObject({ data: { items: [] } });
+
+    const bulk = await postJson(
+      runtime.app,
+      `/api/bars/${bar.id}/menu-items/bulk-create`,
+      {
+        expectedCount: 2,
+        drafts: [
+          {
+            clientDraftId: "draft-whisky",
+            menuItem: {
+              categoryId: whisky.id,
+              name: "라프로익 10",
+              itemType: { source: "system", id: "system-type-whisky" },
+              prices: [
+                { label: "샷", volumeText: "30ml", amountMinor: 19000 },
+                { label: "보틀", volumeText: "700ml", amountMinor: 240000 }
+              ],
+              details: { template: "whisky", brand: "Laphroaig", country: "Scotland", region: "Islay" },
+              internalMemo: "초안에서 최종 저장"
+            }
+          },
+          {
+            clientDraftId: "draft-wine",
+            menuItem: {
+              categoryId: wine.id,
+              name: "하우스 와인",
+              itemType: { source: "system", id: "system-type-wine" },
+              prices: [
+                { label: "글라스", volumeText: "150ml", amountMinor: 14000 },
+                { label: "바틀", volumeText: "750ml", amountMinor: 72000 }
+              ],
+              details: { template: "wine", producer: "THE BAR", country: "France", region: "Bordeaux" }
+            }
+          }
+        ]
+      },
+      admin.cookie,
+      admin.csrf
+    );
+    const body = await readJsonObject(bulk);
+    expect(bulk.status).toBe(201);
+    expect(body).toMatchObject({
+      data: {
+        bulk: {
+          impactCount: 2,
+          created: [
+            expect.objectContaining({ clientDraftId: "draft-whisky", name: "라프로익 10" }),
+            expect.objectContaining({ clientDraftId: "draft-wine", name: "하우스 와인" })
+          ]
+        },
+        items: expect.arrayContaining([
+          expect.objectContaining({
+            name: "라프로익 10",
+            prices: [
+              expect.objectContaining({ label: "샷", isRepresentative: true }),
+              expect.objectContaining({ label: "보틀", isRepresentative: false })
+            ]
+          }),
+          expect.objectContaining({
+            name: "하우스 와인",
+            prices: [
+              expect.objectContaining({ label: "글라스", isRepresentative: false }),
+              expect.objectContaining({ label: "바틀", isRepresentative: true })
+            ]
+          })
+        ])
+      }
+    });
+  });
+
   it("saves prices, fixed template details, and owner-only internal memo", async () => {
     const runtime = createRuntime();
     await seedUser(runtime, "admin1", { isSystemAdmin: true });
