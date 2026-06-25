@@ -81,6 +81,43 @@ describe("publication GitHub adapters", () => {
     });
   });
 
+  it("calls the native fetch through globalThis for Workers runtime binding", async () => {
+    const originalFetch = globalThis.fetch;
+    const workerFetch = vi.fn(function (this: typeof globalThis, _url: RequestInfo | URL, init?: RequestInit) {
+      if (this !== globalThis) throw new TypeError("Illegal invocation");
+      expect(init?.method).toBe("PUT");
+      return Promise.resolve(
+        new Response(JSON.stringify({ content: { sha: "file-sha-3" }, commit: { sha: "commit-sha-3" } }), {
+          status: 201,
+          headers: { "content-type": "application/json" }
+        })
+      );
+    });
+    vi.stubGlobal("fetch", workerFetch);
+    try {
+      const adapter = createGitHubContentsPublicationAdapter({
+        owner: "ryuhojin",
+        repo: "thebars",
+        branch: "main",
+        rootDirectory: "customer-menu-board",
+        token: "secret-token"
+      });
+
+      const result = await adapter.writeFile({
+        operation: "menu_json",
+        path: "public/menus/bar-ro.json",
+        content: "{}",
+        expectedSha: null,
+        message: "Publish BAR RO"
+      });
+
+      expect(result.commitSha).toBe("commit-sha-3");
+      expect(workerFetch).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.stubGlobal("fetch", originalFetch);
+    }
+  });
+
   it("does not use a fake GitHub adapter for D1 runtimes without GitHub configuration", async () => {
     const runtime = createPublicationRuntime({ DB: {} as D1Database });
 

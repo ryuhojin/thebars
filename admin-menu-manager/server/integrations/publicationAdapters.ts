@@ -62,8 +62,10 @@ export type GitHubContentsPublicationAdapterConfig = {
   token: string;
   rootDirectory?: string;
   apiBaseUrl?: string;
-  fetcher?: typeof fetch;
+  fetcher?: GitHubFetch;
 };
+
+type GitHubFetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
 export class FakeGitHubPublicationAdapter implements GitHubPublicationAdapter {
   private readonly files = new Map<string, PublicationFile>();
@@ -191,11 +193,11 @@ export class MissingGitHubPublicationAdapter implements GitHubPublicationAdapter
 
 export class GitHubContentsPublicationAdapter implements GitHubPublicationAdapter {
   private readonly apiBaseUrl: string;
-  private readonly fetcher: typeof fetch;
+  private readonly fetcher: GitHubFetch;
 
   constructor(private readonly config: GitHubContentsPublicationAdapterConfig) {
     this.apiBaseUrl = config.apiBaseUrl?.replace(/\/+$/, "") ?? "https://api.github.com";
-    this.fetcher = config.fetcher ?? fetch;
+    this.fetcher = config.fetcher ?? ((input, init) => globalThis.fetch(input, init));
   }
 
   async readFile(path: string): Promise<PublicationFile | null> {

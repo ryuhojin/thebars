@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   CloudflareDeploymentStatus,
   PublicationListResponse,
@@ -43,6 +43,7 @@ export function PublicationsPage({ barId, navigate }: { barId: string; navigate:
   const [selectedPublicationId, setSelectedPublicationId] = useState("");
   const [layoutConcept, setLayoutConcept] = useState<PublicMenuAvailableConcept>(DEFAULT_PUBLIC_MENU_CONCEPT);
   const [detailOpen, setDetailOpen] = useState(false);
+  const confirmationRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -71,12 +72,21 @@ export function PublicationsPage({ barId, navigate }: { barId: string; navigate:
     return () => window.clearInterval(timer);
   }, [state]);
 
+  useEffect(() => {
+    if (publishState.status !== "confirming" && publishState.status !== "confirming-republish") return;
+    window.requestAnimationFrame(() => {
+      confirmationRef.current?.scrollIntoView({ behavior: "auto", block: "center" });
+      confirmationRef.current?.focus({ preventScroll: true });
+    });
+  }, [publishState.status]);
+
   if (state.status !== "ready") return <PublicationStatusState state={state} navigate={navigate} />;
 
   const selectedPublication = state.data.publications.find((publication) => publication.id === selectedPublicationId) ?? state.data.publications[0] ?? null;
   const activePublication = selectedPublication ?? (publishState.status === "success" ? publishState.result.publication : null);
   const mutationInFlight = publishState.status === "publishing" || publishState.status === "republishing";
   const publishDisabled = !state.data.canPublish || mutationInFlight;
+  const republishingPublicationId = publishState.status === "republishing" ? publishState.publicationId : null;
 
   const startPublish = () => {
     if (!state.data.canPublish) return;
@@ -187,7 +197,14 @@ export function PublicationsPage({ barId, navigate }: { barId: string; navigate:
         </div>
 
         {publishState.status === "confirming" ? (
-          <div className="publication-confirmation" role="dialog" aria-modal="false" aria-labelledby="publication-confirm-title">
+          <div
+            className="publication-confirmation"
+            ref={confirmationRef}
+            role="dialog"
+            aria-modal="false"
+            aria-labelledby="publication-confirm-title"
+            tabIndex={-1}
+          >
             <div>
               <p className="eyebrow">확인</p>
               <h3 id="publication-confirm-title">저장된 메뉴판을 발행할까요?</h3>
@@ -205,7 +222,14 @@ export function PublicationsPage({ barId, navigate }: { barId: string; navigate:
         ) : null}
 
         {publishState.status === "confirming-republish" ? (
-          <div className="publication-confirmation" role="dialog" aria-modal="false" aria-labelledby="republish-confirm-title">
+          <div
+            className="publication-confirmation"
+            ref={confirmationRef}
+            role="dialog"
+            aria-modal="false"
+            aria-labelledby="republish-confirm-title"
+            tabIndex={-1}
+          >
             <div>
               <p className="eyebrow">스냅샷 복구</p>
               <h3 id="republish-confirm-title">공개 {publishState.publication.revision}번을 다시 발행할까요?</h3>
@@ -270,6 +294,7 @@ export function PublicationsPage({ barId, navigate }: { barId: string; navigate:
               selectedId={selectedPublicationId}
               onSelect={setSelectedPublicationId}
               canPublish={state.data.canPublish && !mutationInFlight}
+              republishingPublicationId={republishingPublicationId}
               onRepublish={startRepublish}
             />
           )}
@@ -344,12 +369,14 @@ function PublicationHistory({
   selectedId,
   onSelect,
   canPublish,
+  republishingPublicationId,
   onRepublish
 }: {
   publications: PublicationSummary[];
   selectedId: string;
   onSelect: (publicationId: string) => void;
   canPublish: boolean;
+  republishingPublicationId: string | null;
   onRepublish: (publication: PublicationSummary) => void;
 }) {
   return (
@@ -386,7 +413,7 @@ function PublicationHistory({
                     disabled={!canPublish || publication.status !== "success"}
                     onClick={() => onRepublish(publication)}
                   >
-                    재발행
+                    {republishingPublicationId === publication.id ? "재발행 중" : "재발행"}
                   </button>
                 </div>
               </td>
@@ -416,7 +443,7 @@ function PublicationHistory({
                 disabled={!canPublish || publication.status !== "success"}
                 onClick={() => onRepublish(publication)}
               >
-                재발행
+                {republishingPublicationId === publication.id ? "재발행 중" : "재발행"}
               </button>
             </span>
           </article>

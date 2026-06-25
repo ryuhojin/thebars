@@ -93,7 +93,12 @@ for (const viewport of viewports) {
     await expect(page.getByText("배포 · 성공").first()).toBeVisible();
 
     await page.getByRole("button", { name: "재발행" }).first().click();
-    await expect(page.getByRole("heading", { name: /다시 발행할까요/ })).toBeVisible();
+    const republishConfirmation = page.getByRole("dialog", { name: /다시 발행할까요/ });
+    await expect(republishConfirmation).toBeVisible();
+    await expect(republishConfirmation).toBeFocused();
+    const confirmationBox = await republishConfirmation.boundingBox();
+    expect(confirmationBox?.y ?? -1).toBeGreaterThanOrEqual(0);
+    expect((confirmationBox?.y ?? 0) + (confirmationBox?.height ?? 0)).toBeLessThanOrEqual(844);
     await page.setViewportSize({ width: 390, height: 844 });
     await expect(page).toHaveURL(new RegExp(`/bars/${barId}/publications$`));
     await expect(page.getByRole("heading", { name: /다시 발행할까요/ })).toBeVisible();
