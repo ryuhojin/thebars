@@ -62,10 +62,10 @@ export type GitHubContentsPublicationAdapterConfig = {
   token: string;
   rootDirectory?: string;
   apiBaseUrl?: string;
-  fetcher?: GitHubFetch;
+  fetcher?: HttpFetch;
 };
 
-type GitHubFetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+type HttpFetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
 export class FakeGitHubPublicationAdapter implements GitHubPublicationAdapter {
   private readonly files = new Map<string, PublicationFile>();
@@ -193,7 +193,7 @@ export class MissingGitHubPublicationAdapter implements GitHubPublicationAdapter
 
 export class GitHubContentsPublicationAdapter implements GitHubPublicationAdapter {
   private readonly apiBaseUrl: string;
-  private readonly fetcher: GitHubFetch;
+  private readonly fetcher: HttpFetch;
 
   constructor(private readonly config: GitHubContentsPublicationAdapterConfig) {
     this.apiBaseUrl = config.apiBaseUrl?.replace(/\/+$/, "") ?? "https://api.github.com";
@@ -348,7 +348,7 @@ export class GitHubContentsPublicationAdapter implements GitHubPublicationAdapte
 }
 
 export type CloudflareDeploymentRecord = {
-  adapter: "fake-cloudflare";
+  adapter: "fake-cloudflare" | "cloudflare-pages";
   deploymentId: string;
   encodedSlug: string;
   status: Exclude<CloudflareDeploymentStatus, "timeout_unknown">;
@@ -356,7 +356,7 @@ export type CloudflareDeploymentRecord = {
   deploymentUrl: string;
   createdAt: string;
   updatedAt: string;
-  skippedExternalRead: true;
+  skippedExternalRead: boolean;
 };
 
 export type CloudflareCommitObservation = {
@@ -378,6 +378,14 @@ export class CloudflareDeploymentAdapterError extends Error {
 
 export type FakeCloudflareDeploymentAdapterOptions = {
   readDelayMs?: number;
+};
+
+export type CloudflarePagesDeploymentAdapterConfig = {
+  accountId: string;
+  projectName: string;
+  token: string;
+  apiBaseUrl?: string;
+  fetcher?: HttpFetch;
 };
 
 type FakeDeployment = CloudflareDeploymentRecord & {
@@ -472,6 +480,91 @@ export class FakeCloudflareDeploymentAdapter implements CloudflareDeploymentAdap
   }
 }
 
+export class MissingCloudflareDeploymentAdapter implements CloudflareDeploymentAdapter {
+  constructor(private readonly missingVariables: string[]) {}
+
+  async observeCommit(_input: CloudflareCommitObservation): Promise<void> {
+    this.throwMissingConfig();
+  }
+
+  async listRecentDeployments(): Promise<CloudflareDeploymentRecord[]> {
+    this.throwMissingConfig();
+  }
+
+  private throwMissingConfig(): never {
+    throw new CloudflareDeploymentAdapterError(
+      "CLOUDFLARE_CONFIG_MISSING",
+      `Cloudflare Pages deployment is not configured: ${this.missingVariables.join(", ")}`
+    );
+  }
+}
+
+export class CloudflarePagesDeploymentAdapter implements CloudflareDeploymentAdapter {
+  private readonly apiBaseUrl: string;
+  private readonly fetcher: HttpFetch;
+
+  constructor(private readonly config: CloudflarePagesDeploymentAdapterConfig) {
+    this.apiBaseUrl = config.apiBaseUrl?.replace(/\/+$/, "") ?? "https://api.cloudflare.com/client/v4";
+    this.fetcher = config.fetcher ?? ((input, init) => globalThis.fetch(input, init));
+  }
+
+  async observeCommit(_input: CloudflareCommitObservation): Promise<void> {
+    const response = await this.request("POST");
+    if (!response.ok) {
+      throw new CloudflareDeploymentAdapterError(
+        "CLOUDFLARE_TRIGGER_FAILED",
+        `Cloudflare Pages deployment trigger failed with status ${response.status}.`
+      );
+    }
+    await this.assertSuccessfulResponse(response, "CLOUDFLARE_TRIGGER_FAILED");
+  }
+
+  async listRecentDeployments(): Promise<CloudflareDeploymentRecord[]> {
+    const response = await this.request("GET");
+    if (!response.ok) {
+      throw new CloudflareDeploymentAdapterError(
+        "CLOUDFLARE_READ_FAILED",
+        `Cloudflare Pages deployment read failed with status ${response.status}.`
+      );
+    }
+    const body = await this.assertSuccessfulResponse(response, "CLOUDFLARE_READ_FAILED");
+    const deployments = cloudflareDeploymentsFromResult(body.result);
+    return deployments
+      .map((deployment) => toCloudflarePagesDeploymentRecord(deployment, this.config.projectName))
+      .filter((deployment): deployment is CloudflareDeploymentRecord => deployment !== null)
+      .sort((left, right) => right.createdAt.localeCompare(left.createdAt) || right.deploymentId.localeCompare(left.deploymentId));
+  }
+
+  private async request(method: "GET" | "POST"): Promise<Response> {
+    const url = `${this.apiBaseUrl}/accounts/${encodeURIComponent(this.config.accountId)}/pages/projects/${encodeURIComponent(this.config.projectName)}/deployments`;
+    try {
+      return await this.fetcher(url, {
+        method,
+        headers: {
+          accept: "application/json",
+          authorization: `Bearer ${this.config.token}`,
+          "content-type": "application/json"
+        }
+      });
+    } catch (error) {
+      throw new CloudflareDeploymentAdapterError("CLOUDFLARE_REQUEST_FAILED", safeErrorMessage(error, "Cloudflare request failed."));
+    }
+  }
+
+  private async assertSuccessfulResponse(response: Response, code: string): Promise<CloudflareApiResponse> {
+    let body: CloudflareApiResponse;
+    try {
+      body = await response.json() as CloudflareApiResponse;
+    } catch {
+      throw new CloudflareDeploymentAdapterError(code, "Cloudflare Pages response was invalid.");
+    }
+    if (body.success === false) {
+      throw new CloudflareDeploymentAdapterError(code, cloudflareErrorMessage(body.errors));
+    }
+    return body;
+  }
+}
+
 export function createFakeGitHubPublicationAdapter(options: FakeGitHubPublicationAdapterOptions = {}): FakeGitHubPublicationAdapter {
   return new FakeGitHubPublicationAdapter(options);
 }
@@ -492,6 +585,16 @@ export function createFakeCloudflareDeploymentAdapter(
   return new FakeCloudflareDeploymentAdapter(options);
 }
 
+export function createCloudflarePagesDeploymentAdapter(
+  config: CloudflarePagesDeploymentAdapterConfig
+): CloudflarePagesDeploymentAdapter {
+  return new CloudflarePagesDeploymentAdapter(config);
+}
+
+export function createMissingCloudflareDeploymentAdapter(missingVariables: string[]): MissingCloudflareDeploymentAdapter {
+  return new MissingCloudflareDeploymentAdapter(missingVariables);
+}
+
 function toCloudflareDeploymentRecord(deployment: FakeDeployment): CloudflareDeploymentRecord {
   return {
     adapter: deployment.adapter,
@@ -504,6 +607,88 @@ function toCloudflareDeploymentRecord(deployment: FakeDeployment): CloudflareDep
     updatedAt: deployment.updatedAt,
     skippedExternalRead: deployment.skippedExternalRead
   };
+}
+
+function toCloudflarePagesDeploymentRecord(
+  deployment: CloudflarePagesDeploymentResponse,
+  projectName: string
+): CloudflareDeploymentRecord | null {
+  const deploymentId = stringOrNull(deployment.id ?? deployment.short_id);
+  const sourceCommitSha = cloudflareSourceCommitSha(deployment);
+  const deploymentUrl = stringOrNull(deployment.url ?? deployment.aliases?.[0]);
+  if (!deploymentId || !sourceCommitSha || !deploymentUrl) return null;
+  const createdAt = isoDateOrNow(deployment.created_on ?? deployment.createdAt);
+  return {
+    adapter: "cloudflare-pages",
+    deploymentId,
+    encodedSlug: projectName,
+    status: cloudflarePagesStatus(deployment),
+    sourceCommitSha,
+    deploymentUrl,
+    createdAt,
+    updatedAt: isoDateOrNow(
+      deployment.modified_on ??
+        deployment.modifiedAt ??
+        deployment.latest_stage?.ended_on ??
+        deployment.latest_stage?.started_on ??
+        createdAt
+    ),
+    skippedExternalRead: false
+  };
+}
+
+function cloudflareDeploymentsFromResult(result: unknown): CloudflarePagesDeploymentResponse[] {
+  if (Array.isArray(result)) return result.filter(isCloudflarePagesDeploymentResponse);
+  if (result && typeof result === "object") {
+    const candidate = result as { deployments?: unknown };
+    if (Array.isArray(candidate.deployments)) return candidate.deployments.filter(isCloudflarePagesDeploymentResponse);
+  }
+  return [];
+}
+
+function isCloudflarePagesDeploymentResponse(value: unknown): value is CloudflarePagesDeploymentResponse {
+  return Boolean(value && typeof value === "object");
+}
+
+function cloudflareSourceCommitSha(deployment: CloudflarePagesDeploymentResponse): string | null {
+  return (
+    stringOrNull(deployment.deployment_trigger?.metadata?.commit_hash) ??
+    stringOrNull(deployment.deployment_trigger?.metadata?.commitHash) ??
+    stringOrNull(deployment.source?.config?.commit_hash) ??
+    stringOrNull(deployment.source?.config?.commitHash) ??
+    stringOrNull(deployment.source?.commit_hash) ??
+    stringOrNull(deployment.source?.commitHash) ??
+    null
+  );
+}
+
+function cloudflarePagesStatus(deployment: CloudflarePagesDeploymentResponse): Exclude<CloudflareDeploymentStatus, "timeout_unknown"> {
+  const raw = (
+    stringOrNull(deployment.latest_stage?.status) ??
+    stringOrNull(deployment.status) ??
+    stringOrNull(deployment.stages?.at(-1)?.status) ??
+    "queued"
+  ).toLowerCase();
+  if (["success", "successful", "complete", "completed"].includes(raw)) return "success";
+  if (["failure", "failed", "error", "canceled", "cancelled"].includes(raw)) return "failed";
+  if (["active", "running", "build", "building", "deploying"].includes(raw)) return "building";
+  return "queued";
+}
+
+function stringOrNull(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function isoDateOrNow(value: unknown): string {
+  const text = stringOrNull(value);
+  if (!text) return new Date().toISOString();
+  const timestamp = Date.parse(text);
+  return Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : new Date().toISOString();
+}
+
+function cloudflareErrorMessage(errors: CloudflareApiResponse["errors"]): string {
+  const message = errors?.find((error) => typeof error.message === "string" && error.message.trim())?.message;
+  return message ? message.slice(0, 200) : "Cloudflare Pages API returned an unsuccessful response.";
 }
 
 function delay(ms: number): Promise<void> {
@@ -538,6 +723,46 @@ type GitHubWriteResponse = {
 
 type GitHubDeleteResponse = {
   commit?: { sha?: string };
+};
+
+type CloudflareApiResponse = {
+  success?: boolean;
+  errors?: Array<{ code?: number | string; message?: string }>;
+  result?: unknown;
+};
+
+type CloudflarePagesDeploymentResponse = {
+  id?: unknown;
+  short_id?: unknown;
+  url?: unknown;
+  aliases?: unknown[];
+  status?: unknown;
+  created_on?: unknown;
+  createdAt?: unknown;
+  modified_on?: unknown;
+  modifiedAt?: unknown;
+  latest_stage?: {
+    status?: unknown;
+    started_on?: unknown;
+    ended_on?: unknown;
+  };
+  stages?: Array<{
+    status?: unknown;
+  }>;
+  deployment_trigger?: {
+    metadata?: {
+      commit_hash?: unknown;
+      commitHash?: unknown;
+    };
+  };
+  source?: {
+    commit_hash?: unknown;
+    commitHash?: unknown;
+    config?: {
+      commit_hash?: unknown;
+      commitHash?: unknown;
+    };
+  };
 };
 
 function encodeGitHubPath(path: string): string {
@@ -589,7 +814,7 @@ function base64DecodeBytes(value: string): Uint8Array {
   return new Uint8Array(bytes);
 }
 
-function safeErrorMessage(error: unknown): string {
+function safeErrorMessage(error: unknown, fallback = "GitHub request failed."): string {
   if (error instanceof Error && error.message) return error.message.slice(0, 200);
-  return "GitHub request failed.";
+  return fallback;
 }

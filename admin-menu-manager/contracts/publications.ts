@@ -66,7 +66,7 @@ export const publicationErrorSchema = z
 
 export const cloudflareDeploymentSchema = z
   .object({
-    adapter: z.literal("fake-cloudflare"),
+    adapter: z.enum(["fake-cloudflare", "cloudflare-pages"]),
     deploymentId: z.string().min(1).nullable(),
     status: cloudflareDeploymentStatusSchema,
     sourceCommitSha: z.string().min(1).nullable(),
@@ -74,7 +74,7 @@ export const cloudflareDeploymentSchema = z
     startedAt: z.string().datetime().nullable(),
     checkedAt: z.string().datetime().nullable(),
     completedAt: z.string().datetime().nullable(),
-    skippedExternalRead: z.literal(true)
+    skippedExternalRead: z.boolean()
   })
   .nullable();
 

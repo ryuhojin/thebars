@@ -1,8 +1,10 @@
 import type { CloudflareDeploymentAdapter, GitHubPublicationAdapter } from "../integrations/publicationAdapters";
 import {
+  createCloudflarePagesDeploymentAdapter,
   createFakeCloudflareDeploymentAdapter,
   createFakeGitHubPublicationAdapter,
   createGitHubContentsPublicationAdapter,
+  createMissingCloudflareDeploymentAdapter,
   createMissingGitHubPublicationAdapter
 } from "../integrations/publicationAdapters";
 import { D1PublicationRepository } from "./d1PublicationRepository";
@@ -32,6 +34,12 @@ type PublicationRuntimeEnv = {
   CUSTOMER_REPO_BRANCH?: string;
   CUSTOMER_REPO_ROOT?: string;
   GITHUB_FINE_GRAINED_PAT?: string;
+  CLOUDFLARE_ACCOUNT_ID?: string;
+  CLOUDFLARE_API_TOKEN?: string;
+  CUSTOMER_PAGES_PROJECT_NAME?: string;
+  CLOUDFLARE_PAGES_PROJECT?: string;
+  CLOUDFLARE_PROJECT_NAME?: string;
+  CLOUDFLARE_API_BASE_URL?: string;
 };
 
 export function createPublicationRuntime(
@@ -41,7 +49,7 @@ export function createPublicationRuntime(
   return {
     repository: options.publicationRepository ?? (env?.DB ? new D1PublicationRepository(env.DB) : fallbackRepository),
     githubAdapter: options.githubPublicationAdapter ?? createGitHubAdapter(env),
-    cloudflareAdapter: options.cloudflareDeploymentAdapter ?? fallbackCloudflareAdapter
+    cloudflareAdapter: options.cloudflareDeploymentAdapter ?? createCloudflareAdapter(env)
   };
 }
 
@@ -84,5 +92,35 @@ function createGitHubAdapter(env?: PublicationRuntimeEnv): GitHubPublicationAdap
     branch,
     rootDirectory,
     token
+  });
+}
+
+function createCloudflareAdapter(env?: PublicationRuntimeEnv): CloudflareDeploymentAdapter {
+  if (!env?.DB) return fallbackCloudflareAdapter;
+
+  const accountId = env.CLOUDFLARE_ACCOUNT_ID?.trim();
+  const token = env.CLOUDFLARE_API_TOKEN?.trim();
+  const projectName =
+    env.CUSTOMER_PAGES_PROJECT_NAME?.trim() ||
+    env.CLOUDFLARE_PAGES_PROJECT?.trim() ||
+    env.CLOUDFLARE_PROJECT_NAME?.trim();
+  const requiredVariables: Array<[string, string | undefined]> = [
+    ["CLOUDFLARE_ACCOUNT_ID", accountId],
+    ["CLOUDFLARE_API_TOKEN", token],
+    ["CUSTOMER_PAGES_PROJECT_NAME", projectName]
+  ];
+  const missing = requiredVariables
+    .filter(([, value]) => !value)
+    .map(([name]) => name);
+
+  if (missing.length > 0 || !accountId || !token || !projectName) {
+    return createMissingCloudflareDeploymentAdapter(missing);
+  }
+
+  return createCloudflarePagesDeploymentAdapter({
+    accountId,
+    projectName,
+    token,
+    apiBaseUrl: env.CLOUDFLARE_API_BASE_URL?.trim() || undefined
   });
 }

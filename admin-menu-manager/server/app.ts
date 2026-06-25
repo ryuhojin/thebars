@@ -117,6 +117,12 @@ export type AdminBindings = {
   CUSTOMER_REPO_BRANCH?: string;
   CUSTOMER_REPO_ROOT?: string;
   GITHUB_FINE_GRAINED_PAT?: string;
+  CLOUDFLARE_ACCOUNT_ID?: string;
+  CLOUDFLARE_API_TOKEN?: string;
+  CUSTOMER_PAGES_PROJECT_NAME?: string;
+  CLOUDFLARE_PAGES_PROJECT?: string;
+  CLOUDFLARE_PROJECT_NAME?: string;
+  CLOUDFLARE_API_BASE_URL?: string;
 };
 
 export type AdminHonoEnv = {

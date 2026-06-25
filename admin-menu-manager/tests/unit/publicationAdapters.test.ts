@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import { createGitHubContentsPublicationAdapter } from "../../server/integrations/publicationAdapters";
+import {
+  createCloudflarePagesDeploymentAdapter,
+  createGitHubContentsPublicationAdapter
+} from "../../server/integrations/publicationAdapters";
 import { createPublicationRuntime } from "../../server/publications/runtime";
 
 describe("publication GitHub adapters", () => {
@@ -130,5 +133,112 @@ describe("publication GitHub adapters", () => {
         message: "Publish"
       })
     ).rejects.toMatchObject({ code: "GITHUB_CONFIG_MISSING" });
+  });
+});
+
+describe("publication Cloudflare Pages adapters", () => {
+  it("triggers a customer Pages build and maps deployments by source commit", async () => {
+    const fetcher = vi.fn(async (_url: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+      if (init?.method === "POST") {
+        return new Response(JSON.stringify({ success: true, result: { id: "deployment-triggered" } }), {
+          status: 200,
+          headers: { "content-type": "application/json" }
+        });
+      }
+      return new Response(
+        JSON.stringify({
+          success: true,
+          result: [
+            {
+              id: "deployment-1",
+              url: "https://deployment-1.thebars.pages.dev",
+              created_on: "2026-06-25T01:20:00.000Z",
+              modified_on: "2026-06-25T01:21:00.000Z",
+              latest_stage: { status: "success", ended_on: "2026-06-25T01:21:00.000Z" },
+              deployment_trigger: { metadata: { commit_hash: "commit-sha-1" } }
+            }
+          ]
+        }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      );
+    });
+    const adapter = createCloudflarePagesDeploymentAdapter({
+      accountId: "account-id",
+      projectName: "thebars",
+      token: "secret-token",
+      fetcher: fetcher as typeof fetch
+    });
+
+    await adapter.observeCommit({
+      encodedSlug: "YmFyLWtyYTQ1bQ",
+      commitSha: "commit-sha-1",
+      publicationId: "publication-1"
+    });
+    const deployments = await adapter.listRecentDeployments();
+
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(fetcher.mock.calls[0]?.[0]).toBe("https://api.cloudflare.com/client/v4/accounts/account-id/pages/projects/thebars/deployments");
+    expect(fetcher.mock.calls[0]?.[1]?.method).toBe("POST");
+    expect(fetcher.mock.calls[0]?.[1]?.headers).toMatchObject({ authorization: "Bearer secret-token" });
+    expect(deployments).toEqual([
+      {
+        adapter: "cloudflare-pages",
+        deploymentId: "deployment-1",
+        encodedSlug: "thebars",
+        status: "success",
+        sourceCommitSha: "commit-sha-1",
+        deploymentUrl: "https://deployment-1.thebars.pages.dev",
+        createdAt: "2026-06-25T01:20:00.000Z",
+        updatedAt: "2026-06-25T01:21:00.000Z",
+        skippedExternalRead: false
+      }
+    ]);
+  });
+
+  it("calls Cloudflare fetch through globalThis for Workers runtime binding", async () => {
+    const originalFetch = globalThis.fetch;
+    const workerFetch = vi.fn(function (this: typeof globalThis, _url: RequestInfo | URL, init?: RequestInit) {
+      if (this !== globalThis) throw new TypeError("Illegal invocation");
+      expect(init?.method).toBe("POST");
+      return Promise.resolve(new Response(JSON.stringify({ success: true, result: { id: "deployment-2" } }), {
+        status: 200,
+        headers: { "content-type": "application/json" }
+      }));
+    });
+    vi.stubGlobal("fetch", workerFetch);
+    try {
+      const adapter = createCloudflarePagesDeploymentAdapter({
+        accountId: "account-id",
+        projectName: "thebars",
+        token: "secret-token"
+      });
+
+      await adapter.observeCommit({
+        encodedSlug: "YmFyLWtyYTQ1bQ",
+        commitSha: "commit-sha-2",
+        publicationId: "publication-2"
+      });
+
+      expect(workerFetch).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.stubGlobal("fetch", originalFetch);
+    }
+  });
+
+  it("does not use a fake Cloudflare adapter for D1 runtimes without Cloudflare configuration", async () => {
+    const runtime = createPublicationRuntime({
+      DB: {} as D1Database,
+      CUSTOMER_REPO_OWNER: "ryuhojin",
+      CUSTOMER_REPO_NAME: "thebars",
+      GITHUB_FINE_GRAINED_PAT: "secret-token"
+    });
+
+    await expect(
+      runtime.cloudflareAdapter.observeCommit({
+        encodedSlug: "YmFyLWtyYTQ1bQ",
+        commitSha: "commit-sha-3",
+        publicationId: "publication-3"
+      })
+    ).rejects.toMatchObject({ code: "CLOUDFLARE_CONFIG_MISSING" });
   });
 });

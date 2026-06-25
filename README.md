@@ -386,7 +386,7 @@ npm run dev -- --port 5173
 - 바 manager: `manager1` / `<local-fixture-password>`
 - 바 staff: `staff1` / `<local-fixture-password>`
 
-D15는 `/api/bars/{barId}/publications`에서 현재 저장본을 public JSON으로 변환·검증한 뒤 운영 D1 런타임에서는 GitHub Contents API로 고객 저장소의 `public/menus/{encodedSlug}.json`을 커밋한다. 현재 GitHub 저장소는 monorepo이므로 운영 Pages에는 `CUSTOMER_REPO_ROOT=customer-menu-board`를 함께 설정해 실제 쓰기 경로를 `customer-menu-board/public/menus/{encodedSlug}.json`로 맞춘다. 로컬/test에서 D1 binding 없이 실행할 때만 fake GitHub adapter를 사용한다. 운영 Pages에는 `CUSTOMER_REPO_OWNER`, `CUSTOMER_REPO_NAME`, `CUSTOMER_REPO_BRANCH`, `CUSTOMER_REPO_ROOT`, `GITHUB_FINE_GRAINED_PAT`를 설정해야 하며, D1이 붙은 런타임에서 GitHub 설정이 누락되면 fake 성공으로 기록하지 않고 `GITHUB_PUBLICATION_NOT_CONFIGURED`로 실패한다. 최초 또는 내용 변경 발행은 `public/menus/{encodedSlug}.json`을 쓰고, 동일 내용 재발행은 `public/publish-triggers/{encodedSlug}.json`만 갱신한다. 바별 발행 lock과 고객 repo 전역 commit lock을 분리하며, schema 검증 실패는 GitHub 쓰기 없이 422로 종료한다. 발행 화면은 WF-18의 같은 `/bars/{barId}/publications` URL에서 확인 panel, 진행 단계, 이력, 스냅샷 상세를 compact·medium·wide layout으로만 전환하고 확인 상태와 선택 이력은 resize 후 유지된다. Cloudflare deployment polling과 이력 심화는 D16 범위다.
+D15는 `/api/bars/{barId}/publications`에서 현재 저장본을 public JSON으로 변환·검증한 뒤 운영 D1 런타임에서는 GitHub Contents API로 고객 저장소의 `public/menus/{encodedSlug}.json`을 커밋한다. 현재 GitHub 저장소는 monorepo이므로 운영 Pages에는 `CUSTOMER_REPO_ROOT=customer-menu-board`를 함께 설정해 실제 쓰기 경로를 `customer-menu-board/public/menus/{encodedSlug}.json`로 맞춘다. 로컬/test에서 D1 binding 없이 실행할 때만 fake GitHub adapter를 사용한다. 운영 Pages에는 `CUSTOMER_REPO_OWNER`, `CUSTOMER_REPO_NAME`, `CUSTOMER_REPO_BRANCH`, `CUSTOMER_REPO_ROOT`, `GITHUB_FINE_GRAINED_PAT`를 설정해야 하며, D1이 붙은 런타임에서 GitHub 설정이 누락되면 fake 성공으로 기록하지 않고 `GITHUB_PUBLICATION_NOT_CONFIGURED`로 실패한다. 최초 또는 내용 변경 발행은 `public/menus/{encodedSlug}.json`을 쓰고, 동일 내용 재발행은 `public/publish-triggers/{encodedSlug}.json`만 갱신한다. 바별 발행 lock과 고객 repo 전역 commit lock을 분리하며, schema 검증 실패는 GitHub 쓰기 없이 422로 종료한다. 발행 화면은 WF-18의 같은 `/bars/{barId}/publications` URL에서 확인 panel, 진행 단계, 이력, 스냅샷 상세를 compact·medium·wide layout으로만 전환하고 확인 상태와 선택 이력은 resize 후 유지된다. GitHub commit 이후 고객 Pages 빌드 요청과 배포 확인은 D16 범위다.
 
 ## D16 로컬 Cloudflare 배포 상태·발행 이력 확인
 
@@ -410,7 +410,7 @@ npm run dev -- --port 5173
 - 바 manager: `manager1` / `<local-fixture-password>`
 - 바 staff: `staff1` / `<local-fixture-password>`
 
-D16은 GitHub commit 이후 fake Cloudflare adapter에서 deployment를 조회하고, 대상 commit SHA와 일치하는 deployment만 성공으로 인정한다. 발행 row는 `waiting_cloudflare`를 거쳐 `success`, `failed`, `timeout_unknown` 중 하나로 종료된다. 관리자 화면은 30초 polling metadata를 사용하고 재진입 시 같은 API가 대기 중 deployment를 다시 조정한다. 3분 안에 대상 SHA의 성공/실패를 확인하지 못하면 `timeout_unknown`으로 기록하며 성공으로 거짓 표시하지 않는다. 성공 publication/snapshot은 최근 100건, 실패·확인 불가 row는 최근 100건만 보관한다. 이 동작은 fake adapter와 local/test data에서만 검증하며 실제 Cloudflare token이나 production deploy는 사용하지 않는다.
+D16은 GitHub commit 이후 운영 D1 런타임에서 Cloudflare Pages API로 고객 프로젝트의 새 deployment를 요청하고, Pages deployment 목록에서 대상 commit SHA와 일치하는 deployment만 성공으로 인정한다. 로컬/test에서 D1 binding 없이 실행할 때만 fake Cloudflare adapter를 사용한다. 운영 Pages에는 `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`, `CUSTOMER_PAGES_PROJECT_NAME=thebars`를 설정해야 하며, D1이 붙은 런타임에서 Cloudflare 설정이 누락되면 fake 성공으로 기록하지 않고 `CLOUDFLARE_DEPLOYMENT_NOT_CONFIGURED`로 실패한다. 발행 row는 `waiting_cloudflare`를 거쳐 `success`, `failed`, `timeout_unknown` 중 하나로 종료된다. 관리자 화면은 30초 polling metadata를 사용하고 재진입 시 같은 API가 대기 중 deployment를 다시 조정한다. 3분 안에 대상 SHA의 성공/실패를 확인하지 못하면 `timeout_unknown`으로 기록하며 성공으로 거짓 표시하지 않는다. 성공 publication/snapshot은 최근 100건, 실패·확인 불가 row는 최근 100건만 보관한다.
 
 ## D17 로컬 과거 재발행·바 수명주기 확인
 
@@ -665,6 +665,8 @@ npx wrangler d1 execute <production-d1-name> --remote --command "SELECT COUNT(*)
 - Root directory: `admin-menu-manager`
 - Build command: `npm run build`
 - Output directory: `dist`
+- Production D1 binding: `DB`
+- Production publication env/secrets: `CUSTOMER_REPO_OWNER`, `CUSTOMER_REPO_NAME`, `CUSTOMER_REPO_BRANCH`, `CUSTOMER_REPO_ROOT`, `GITHUB_FINE_GRAINED_PAT`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`, `CUSTOMER_PAGES_PROJECT_NAME`
 
 고객 메뉴판 Pages project:
 
@@ -672,5 +674,6 @@ npx wrangler d1 execute <production-d1-name> --remote --command "SELECT COUNT(*)
 - Root directory: `customer-menu-board`
 - Build command: `npm run build`
 - Output directory: `dist`
+- 관리자 발행 service가 GitHub commit 후 이 고객 Pages project의 deployment build를 API로 요청한다.
 
 각 앱의 production build는 `tsconfig.build.json`을 사용한다. admin은 `src`, `server`, `functions`, `contracts`, `db`, `shared`, `vite.config.ts`만 typecheck하고, customer는 `src`, `contracts`, `shared`, `vite.config.ts`만 typecheck한다. `tests/e2e`, `vitest.config.ts`, `playwright.config.ts`는 로컬 검증용 `npm run typecheck`/`npm run test:e2e`에서만 검사한다. Cloudflare Pages가 각 앱 root directory에서만 `npm install`을 실행해도 production build가 `@playwright/test`에 의존하지 않도록 분리한 구조다.

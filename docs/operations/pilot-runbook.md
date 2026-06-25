@@ -26,19 +26,21 @@
 - `SETUP_TOKEN`
 - `ADMIN_RECOVERY_TOKEN`
 
-실제 GitHub/Cloudflare 발행 adapter를 연결하는 업무 전까지 다음 값은 production에 설정하지 않는다. 현재 code path는 fake publication adapter를 사용하며 이 값들을 읽지 않는다.
+운영 발행 adapter는 production D1 런타임에서 다음 값을 읽는다. GitHub 값은 고객 JSON commit에, Cloudflare 값은 고객 Pages deployment build 요청과 상태 조회에 사용한다.
 
 - `CUSTOMER_REPO_OWNER`
 - `CUSTOMER_REPO_NAME`
 - `CUSTOMER_REPO_BRANCH`
+- `CUSTOMER_REPO_ROOT`
 - `GITHUB_FINE_GRAINED_PAT`
 - `CLOUDFLARE_ACCOUNT_ID`
-- `CLOUDFLARE_PROJECT_NAME`
+- `CLOUDFLARE_API_TOKEN`
+- `CUSTOMER_PAGES_PROJECT_NAME`
 
 확인 기준:
 
 - GitHub token은 고객 저장소 하나에 `Contents: write` 최소 권한만 가진다.
-- Cloudflare token은 대상 Pages project와 deployment 조회에 필요한 범위만 가진다.
+- Cloudflare token은 대상 Pages project build 요청과 deployment 조회에 필요한 Pages Edit 범위만 가진다.
 - token 원문은 설정 화면, audit log, public JSON, test artifact에 남지 않는다.
 - token rotation 날짜와 담당자를 release note에 기록한다.
 

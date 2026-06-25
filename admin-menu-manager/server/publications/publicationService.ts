@@ -844,8 +844,13 @@ function snapshotToPublication(snapshot: PublicationSnapshotRecord, barId: strin
 
 function toDeployment(record: PublicationRecord): CloudflareDeployment {
   if (!record.deploymentStatus && !record.deploymentId && !record.commitSha) return null;
+  const usesRealPages =
+    Boolean(record.commitSha) &&
+    !record.commitSha?.startsWith("fake-commit-") &&
+    !record.deploymentId?.startsWith("fake-deployment-") &&
+    !record.deploymentId?.startsWith("snapshot-");
   return {
-    adapter: "fake-cloudflare",
+    adapter: usesRealPages ? "cloudflare-pages" : "fake-cloudflare",
     deploymentId: record.deploymentId,
     status: record.deploymentStatus ?? "queued",
     sourceCommitSha: record.deploymentSourceCommitSha ?? record.commitSha,
@@ -853,7 +858,7 @@ function toDeployment(record: PublicationRecord): CloudflareDeployment {
     startedAt: record.deploymentStartedAt,
     checkedAt: record.deploymentCheckedAt,
     completedAt: record.deploymentCompletedAt,
-    skippedExternalRead: true
+    skippedExternalRead: !usesRealPages
   };
 }
 
@@ -869,7 +874,10 @@ function mapPublicationError(error: unknown): AuthServiceError {
     return new AuthServiceError(502, error.code, `고객 메뉴판 반영 단계에서 실패했습니다. ${error.message}`, {}, { phase: "github" });
   }
   if (error instanceof CloudflareDeploymentAdapterError) {
-    return new AuthServiceError(502, "CLOUDFLARE_DEPLOYMENT_LOOKUP_FAILED", "고객 화면 배포 상태를 확인하지 못했습니다.");
+    if (error.code === "CLOUDFLARE_CONFIG_MISSING") {
+      return new AuthServiceError(500, "CLOUDFLARE_DEPLOYMENT_NOT_CONFIGURED", "고객 화면 배포 설정이 완료되지 않았습니다.");
+    }
+    return new AuthServiceError(502, error.code, `고객 화면 배포 확인 단계에서 실패했습니다. ${error.message}`, {}, { phase: "cloudflare" });
   }
   if (isPublicSchemaError(error)) {
     return new AuthServiceError(422, "PUBLIC_SCHEMA_INVALID", `공개 데이터 검증에 실패했습니다. ${publicSchemaErrorSummary(error)}`);
