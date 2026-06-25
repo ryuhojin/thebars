@@ -60,6 +60,7 @@ export type GitHubContentsPublicationAdapterConfig = {
   repo: string;
   branch: string;
   token: string;
+  rootDirectory?: string;
   apiBaseUrl?: string;
   fetcher?: typeof fetch;
 };
@@ -204,7 +205,7 @@ export class GitHubContentsPublicationAdapter implements GitHubPublicationAdapte
     });
     if (response.status === 404) return null;
     if (!response.ok) {
-      throw new GitHubPublicationAdapterError("GITHUB_READ_FAILED", "GitHub file read failed.");
+      throw new GitHubPublicationAdapterError("GITHUB_READ_FAILED", `GitHub file read failed with status ${response.status}.`);
     }
     const body = await response.json() as GitHubContentResponse;
     if (body.type !== "file" || !body.sha || typeof body.content !== "string") {
@@ -233,7 +234,7 @@ export class GitHubContentsPublicationAdapter implements GitHubPublicationAdapte
       throw new GitHubPublicationAdapterError("GITHUB_FILE_SHA_CONFLICT", "GitHub file SHA changed.");
     }
     if (!response.ok) {
-      throw new GitHubPublicationAdapterError("GITHUB_WRITE_FAILED", "GitHub file write failed.");
+      throw new GitHubPublicationAdapterError("GITHUB_WRITE_FAILED", `GitHub file write failed with status ${response.status}.`);
     }
     const body = await response.json() as GitHubWriteResponse;
     const commitSha = body.commit?.sha;
@@ -276,7 +277,7 @@ export class GitHubContentsPublicationAdapter implements GitHubPublicationAdapte
       throw new GitHubPublicationAdapterError("GITHUB_FILE_SHA_CONFLICT", "GitHub file SHA changed.");
     }
     if (!response.ok) {
-      throw new GitHubPublicationAdapterError("GITHUB_DELETE_FAILED", "GitHub file delete failed.");
+      throw new GitHubPublicationAdapterError("GITHUB_DELETE_FAILED", `GitHub file delete failed with status ${response.status}.`);
     }
     const body = await response.json() as GitHubDeleteResponse;
     const commitSha = body.commit?.sha;
@@ -306,7 +307,7 @@ export class GitHubContentsPublicationAdapter implements GitHubPublicationAdapte
     });
   }
 
-  private request(
+  private async request(
     path: string,
     options: {
       method: "GET" | "PUT" | "DELETE";
@@ -314,22 +315,33 @@ export class GitHubContentsPublicationAdapter implements GitHubPublicationAdapte
       body?: unknown;
     }
   ): Promise<Response> {
+    const githubPath = this.githubPath(path);
     const url = new URL(
-      `${this.apiBaseUrl}/repos/${encodeURIComponent(this.config.owner)}/${encodeURIComponent(this.config.repo)}/contents/${encodeGitHubPath(path)}`
+      `${this.apiBaseUrl}/repos/${encodeURIComponent(this.config.owner)}/${encodeURIComponent(this.config.repo)}/contents/${encodeGitHubPath(githubPath)}`
     );
     for (const [key, value] of Object.entries(options.query ?? {})) {
       url.searchParams.set(key, value);
     }
-    return this.fetcher(url.toString(), {
-      method: options.method,
-      headers: {
-        accept: "application/vnd.github+json",
-        authorization: `Bearer ${this.config.token}`,
-        "content-type": "application/json",
-        "x-github-api-version": "2022-11-28"
-      },
-      body: options.body === undefined ? undefined : JSON.stringify(options.body)
-    });
+    try {
+      return await this.fetcher(url.toString(), {
+        method: options.method,
+        headers: {
+          accept: "application/vnd.github+json",
+          authorization: `Bearer ${this.config.token}`,
+          "content-type": "application/json",
+          "user-agent": "thebar-publication-service",
+          "x-github-api-version": "2022-11-28"
+        },
+        body: options.body === undefined ? undefined : JSON.stringify(options.body)
+      });
+    } catch (error) {
+      throw new GitHubPublicationAdapterError("GITHUB_REQUEST_FAILED", safeErrorMessage(error));
+    }
+  }
+
+  private githubPath(path: string): string {
+    const root = this.config.rootDirectory?.trim().replace(/^\/+|\/+$/g, "");
+    return root ? `${root}/${path.replace(/^\/+/, "")}` : path;
   }
 }
 
@@ -532,16 +544,50 @@ function encodeGitHubPath(path: string): string {
 
 function encodeBase64(value: string): string {
   const bytes = new TextEncoder().encode(value);
-  let binary = "";
-  for (const byte of bytes) binary += String.fromCharCode(byte);
-  return btoa(binary);
+  return base64EncodeBytes(bytes);
 }
 
 function decodeBase64(value: string): string {
-  const binary = atob(value.replace(/\s/g, ""));
-  const bytes = new Uint8Array(binary.length);
-  for (let index = 0; index < binary.length; index += 1) {
-    bytes[index] = binary.charCodeAt(index);
-  }
+  const bytes = base64DecodeBytes(value.replace(/\s/g, ""));
   return new TextDecoder().decode(bytes);
+}
+
+const base64Alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+function base64EncodeBytes(bytes: Uint8Array): string {
+  let output = "";
+  for (let index = 0; index < bytes.length; index += 3) {
+    const first = bytes[index] ?? 0;
+    const second = bytes[index + 1] ?? 0;
+    const third = bytes[index + 2] ?? 0;
+    const triplet = (first << 16) | (second << 8) | third;
+    output += base64Alphabet[(triplet >> 18) & 63];
+    output += base64Alphabet[(triplet >> 12) & 63];
+    output += index + 1 < bytes.length ? base64Alphabet[(triplet >> 6) & 63] : "=";
+    output += index + 2 < bytes.length ? base64Alphabet[triplet & 63] : "=";
+  }
+  return output;
+}
+
+function base64DecodeBytes(value: string): Uint8Array {
+  const normalized = value.replace(/=+$/, "");
+  const bytes: number[] = [];
+  let buffer = 0;
+  let bits = 0;
+  for (const char of normalized) {
+    const next = base64Alphabet.indexOf(char);
+    if (next < 0) throw new GitHubPublicationAdapterError("GITHUB_READ_INVALID", "GitHub file content was not base64.");
+    buffer = (buffer << 6) | next;
+    bits += 6;
+    if (bits >= 8) {
+      bits -= 8;
+      bytes.push((buffer >> bits) & 0xff);
+    }
+  }
+  return new Uint8Array(bytes);
+}
+
+function safeErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message) return error.message.slice(0, 200);
+  return "GitHub request failed.";
 }

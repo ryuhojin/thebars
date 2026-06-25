@@ -30,6 +30,7 @@ type PublicationRuntimeEnv = {
   CUSTOMER_REPO_OWNER?: string;
   CUSTOMER_REPO_NAME?: string;
   CUSTOMER_REPO_BRANCH?: string;
+  CUSTOMER_REPO_ROOT?: string;
   GITHUB_FINE_GRAINED_PAT?: string;
 };
 
@@ -63,6 +64,7 @@ function createGitHubAdapter(env?: PublicationRuntimeEnv): GitHubPublicationAdap
   const repo = env.CUSTOMER_REPO_NAME?.trim();
   const token = env.GITHUB_FINE_GRAINED_PAT?.trim();
   const branch = env.CUSTOMER_REPO_BRANCH?.trim() || "main";
+  const rootDirectory = env.CUSTOMER_REPO_ROOT?.trim() || undefined;
   const requiredVariables: Array<[string, string | undefined]> = [
     ["CUSTOMER_REPO_OWNER", owner],
     ["CUSTOMER_REPO_NAME", repo],
@@ -80,6 +82,7 @@ function createGitHubAdapter(env?: PublicationRuntimeEnv): GitHubPublicationAdap
     owner,
     repo,
     branch,
+    rootDirectory,
     token
   });
 }

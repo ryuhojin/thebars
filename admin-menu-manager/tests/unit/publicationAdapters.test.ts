@@ -44,7 +44,40 @@ describe("publication GitHub adapters", () => {
     expect(request?.headers).toMatchObject({ authorization: "Bearer secret-token" });
     expect(JSON.parse(String(request?.body))).toMatchObject({
       branch: "main",
+      content: "eyJuYW1lIjoiQkFSIFJPIn0=",
       message: "Publish BAR RO"
+    });
+  });
+
+  it("writes to a configured repository root and encodes Korean JSON safely", async () => {
+    const fetcher = vi.fn(async (_url: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+      if (init?.method === "GET") return new Response("{}", { status: 404 });
+      return new Response(JSON.stringify({ content: { sha: "file-sha-2" }, commit: { sha: "commit-sha-2" } }), {
+        status: 201,
+        headers: { "content-type": "application/json" }
+      });
+    });
+    const adapter = createGitHubContentsPublicationAdapter({
+      owner: "ryuhojin",
+      repo: "thebars",
+      branch: "main",
+      rootDirectory: "customer-menu-board",
+      token: "secret-token",
+      fetcher: fetcher as typeof fetch
+    });
+
+    await adapter.writeFile({
+      operation: "menu_json",
+      path: "public/menus/bar-ro.json",
+      content: JSON.stringify({ name: "바 로" }),
+      expectedSha: null,
+      message: "Publish BAR RO"
+    });
+
+    const [url, request] = fetcher.mock.calls[0] ?? [];
+    expect(url).toBe("https://api.github.com/repos/ryuhojin/thebars/contents/customer-menu-board/public/menus/bar-ro.json");
+    expect(JSON.parse(String(request?.body))).toMatchObject({
+      content: "eyJuYW1lIjoi67CUIOuhnCJ9"
     });
   });
 

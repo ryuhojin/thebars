@@ -115,6 +115,7 @@ export type AdminBindings = {
   CUSTOMER_REPO_OWNER?: string;
   CUSTOMER_REPO_NAME?: string;
   CUSTOMER_REPO_BRANCH?: string;
+  CUSTOMER_REPO_ROOT?: string;
   GITHUB_FINE_GRAINED_PAT?: string;
 };
 

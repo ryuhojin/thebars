@@ -866,15 +866,35 @@ function mapPublicationError(error: unknown): AuthServiceError {
     if (error.code === "GITHUB_FILE_SHA_CONFLICT") {
       return new AuthServiceError(409, "GITHUB_FILE_SHA_CONFLICT", "고객 저장소 파일이 변경되었습니다. 다시 발행하세요.");
     }
-    return new AuthServiceError(502, "GITHUB_COMMIT_FAILED", "고객 메뉴판 반영 단계에서 실패했습니다.");
+    return new AuthServiceError(502, error.code, `고객 메뉴판 반영 단계에서 실패했습니다. ${error.message}`, {}, { phase: "github" });
   }
   if (error instanceof CloudflareDeploymentAdapterError) {
     return new AuthServiceError(502, "CLOUDFLARE_DEPLOYMENT_LOOKUP_FAILED", "고객 화면 배포 상태를 확인하지 못했습니다.");
   }
-  if (error instanceof ZodError || (error instanceof Error && /Forbidden public menu field|Invalid|schema|Zod/i.test(error.message))) {
-    return new AuthServiceError(422, "PUBLIC_SCHEMA_INVALID", "공개 데이터 검증에 실패했습니다.");
+  if (isPublicSchemaError(error)) {
+    return new AuthServiceError(422, "PUBLIC_SCHEMA_INVALID", `공개 데이터 검증에 실패했습니다. ${publicSchemaErrorSummary(error)}`);
   }
   return new AuthServiceError(500, "PUBLICATION_FAILED", "발행을 완료하지 못했습니다.");
+}
+
+function isPublicSchemaError(error: unknown): boolean {
+  if (error instanceof ZodError) return true;
+  if (!error || typeof error !== "object") return false;
+  const candidate = error as { name?: unknown; issues?: unknown; message?: unknown };
+  if (candidate.name === "ZodError" || Array.isArray(candidate.issues)) return true;
+  return typeof candidate.message === "string" && /Forbidden public menu field|Invalid|schema|Zod/i.test(candidate.message);
+}
+
+function publicSchemaErrorSummary(error: unknown): string {
+  const candidate = error as { issues?: unknown; message?: unknown };
+  if (Array.isArray(candidate?.issues)) {
+    const firstIssue = candidate.issues[0] as { path?: unknown[]; message?: unknown } | undefined;
+    const path = Array.isArray(firstIssue?.path) && firstIssue.path.length > 0 ? firstIssue.path.join(".") : "schema";
+    const message = typeof firstIssue?.message === "string" ? firstIssue.message : "invalid public data";
+    return `${path}: ${message}`;
+  }
+  if (typeof candidate?.message === "string") return candidate.message.slice(0, 200);
+  return "invalid public data";
 }
 
 function assertSystemAdmin(actor: AuthUserRecord): void {
