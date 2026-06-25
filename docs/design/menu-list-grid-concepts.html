@@ -1,0 +1,765 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>THE BAR menu list grid concepts</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f4f7fb;
+        --surface: #ffffff;
+        --surface-soft: #f8fafc;
+        --line: #d9e1ec;
+        --line-strong: #c6d2df;
+        --text: #152033;
+        --muted: #6c7a8e;
+        --primary: #155eef;
+        --primary-soft: #e8f0ff;
+        --green: #0f7a5a;
+        --green-soft: #e5f6ef;
+        --amber: #9d6b04;
+        --amber-soft: #fff4d8;
+        --red: #b42318;
+        --red-soft: #fff1f0;
+        --shadow: 0 18px 50px rgba(19, 38, 68, 0.08);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      .board {
+        display: grid;
+        gap: 28px;
+        padding: 28px;
+      }
+
+      .intro {
+        max-width: 1180px;
+        display: grid;
+        gap: 10px;
+      }
+
+      .intro p,
+      .caption {
+        margin: 0;
+        color: var(--muted);
+        line-height: 1.55;
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin-top: 0;
+      }
+
+      h1 {
+        margin-bottom: 0;
+        font-size: 30px;
+        letter-spacing: 0;
+      }
+
+      h2 {
+        margin-bottom: 8px;
+        font-size: 20px;
+        letter-spacing: 0;
+      }
+
+      h3 {
+        margin: 0;
+        font-size: 15px;
+        letter-spacing: 0;
+      }
+
+      .concept {
+        max-width: 1480px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--surface);
+        box-shadow: var(--shadow);
+        overflow: hidden;
+      }
+
+      .concept-header {
+        min-height: 74px;
+        border-bottom: 1px solid var(--line);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 20px;
+        padding: 18px 22px;
+      }
+
+      .concept-title {
+        display: grid;
+        gap: 4px;
+      }
+
+      .eyebrow {
+        color: var(--primary);
+        font-size: 12px;
+        font-weight: 900;
+      }
+
+      .actions {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 10px;
+      }
+
+      .btn {
+        min-height: 42px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--surface);
+        color: var(--text);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0 14px;
+        font-weight: 800;
+        white-space: nowrap;
+      }
+
+      .btn.primary {
+        border-color: var(--primary);
+        background: var(--primary);
+        color: #ffffff;
+      }
+
+      .btn.soft {
+        border-color: #b9d0ff;
+        background: var(--primary-soft);
+        color: #0d3c9c;
+      }
+
+      .btn.ghost {
+        background: var(--surface-soft);
+      }
+
+      .save-state {
+        min-height: 42px;
+        border: 1px solid #91d6bc;
+        border-radius: 999px;
+        background: var(--green-soft);
+        color: var(--green);
+        display: inline-flex;
+        align-items: center;
+        padding: 0 14px;
+        font-size: 13px;
+        font-weight: 900;
+      }
+
+      .toolbar {
+        border-bottom: 1px solid var(--line);
+        display: grid;
+        grid-template-columns: minmax(260px, 1fr) auto;
+        gap: 16px;
+        padding: 16px 22px;
+      }
+
+      .search {
+        min-height: 42px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--surface-soft);
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 0 12px;
+        color: var(--muted);
+        font-weight: 750;
+      }
+
+      .filters {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        justify-content: flex-end;
+      }
+
+      .filter-chip {
+        min-height: 42px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: var(--surface);
+        display: inline-flex;
+        align-items: center;
+        padding: 0 12px;
+        color: var(--muted);
+        font-size: 13px;
+        font-weight: 800;
+      }
+
+      .metrics {
+        border-bottom: 1px solid var(--line);
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 10px;
+        padding: 14px 22px;
+      }
+
+      .metric {
+        min-height: 52px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--surface-soft);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 0 14px;
+        color: var(--muted);
+        font-weight: 850;
+      }
+
+      .metric strong {
+        color: var(--text);
+        font-size: 18px;
+      }
+
+      .grid-wrap {
+        padding: 0 22px 22px;
+      }
+
+      .grid {
+        width: 100%;
+        border-collapse: separate;
+        border-spacing: 0;
+        table-layout: fixed;
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--surface);
+      }
+
+      .grid th {
+        height: 42px;
+        border-bottom: 1px solid var(--line);
+        background: #f7f9fc;
+        color: var(--muted);
+        padding: 0 12px;
+        text-align: left;
+        font-size: 12px;
+        font-weight: 900;
+      }
+
+      .grid td {
+        min-height: 64px;
+        border-bottom: 1px solid #edf1f6;
+        padding: 12px;
+        vertical-align: middle;
+      }
+
+      .grid tr:last-child td {
+        border-bottom: 0;
+      }
+
+      .grid tr.is-editing td {
+        background: #f7fbff;
+      }
+
+      .grid tr.is-dirty td {
+        box-shadow: inset 3px 0 0 #e6b94d;
+      }
+
+      .menu-name {
+        display: grid;
+        gap: 4px;
+      }
+
+      .menu-name strong {
+        font-size: 14px;
+      }
+
+      .menu-name span,
+      .sub {
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 750;
+      }
+
+      .stack {
+        display: grid;
+        gap: 4px;
+      }
+
+      .price {
+        color: #6c4820;
+        font-size: 15px;
+        font-weight: 950;
+      }
+
+      .pill-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+
+      .pill {
+        min-height: 28px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: var(--surface-soft);
+        display: inline-flex;
+        align-items: center;
+        padding: 0 9px;
+        font-size: 12px;
+        font-weight: 850;
+        white-space: nowrap;
+      }
+
+      .pill.green {
+        border-color: #96d7bf;
+        background: var(--green-soft);
+        color: var(--green);
+      }
+
+      .pill.amber {
+        border-color: #ead18a;
+        background: var(--amber-soft);
+        color: var(--amber);
+      }
+
+      .pill.red {
+        border-color: #ffc9c4;
+        background: var(--red-soft);
+        color: var(--red);
+      }
+
+      .row-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+      }
+
+      .icon-btn {
+        width: 36px;
+        height: 36px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--surface);
+        color: var(--muted);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 900;
+      }
+
+      .edit-cell {
+        min-height: 42px;
+        border: 1px solid var(--line-strong);
+        border-radius: 8px;
+        background: var(--surface);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        padding: 0 10px;
+        color: var(--text);
+        font-size: 13px;
+        font-weight: 850;
+      }
+
+      .split {
+        display: grid;
+        grid-template-columns: 230px minmax(0, 1fr) 300px;
+        min-height: 620px;
+      }
+
+      .category-rail {
+        border-right: 1px solid var(--line);
+        background: #f8fafc;
+        display: grid;
+        align-content: start;
+        gap: 8px;
+        padding: 18px;
+      }
+
+      .rail-item {
+        min-height: 42px;
+        border: 1px solid transparent;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        padding: 0 10px;
+        color: var(--muted);
+        font-weight: 850;
+      }
+
+      .rail-item.active {
+        border-color: #b9d0ff;
+        background: var(--primary-soft);
+        color: #0d3c9c;
+      }
+
+      .rail-item strong {
+        color: inherit;
+      }
+
+      .split-main {
+        display: grid;
+        align-content: start;
+        gap: 14px;
+        padding: 18px;
+      }
+
+      .split-detail {
+        border-left: 1px solid var(--line);
+        background: #fbfcfe;
+        display: grid;
+        align-content: start;
+        gap: 14px;
+        padding: 18px;
+      }
+
+      .detail-block {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--surface);
+        display: grid;
+        gap: 10px;
+        padding: 14px;
+      }
+
+      .detail-list {
+        display: grid;
+        gap: 8px;
+      }
+
+      .detail-row {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        color: var(--muted);
+        font-size: 13px;
+        font-weight: 800;
+      }
+
+      .detail-row strong {
+        color: var(--text);
+        text-align: right;
+      }
+
+      .dense-toolbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      .note {
+        border-top: 1px solid var(--line);
+        background: #fbfcfe;
+        padding: 16px 22px;
+      }
+
+      @media (max-width: 900px) {
+        .board {
+          padding: 16px;
+        }
+
+        .concept-header,
+        .toolbar,
+        .metrics,
+        .split,
+        .dense-toolbar {
+          grid-template-columns: 1fr;
+          display: grid;
+        }
+
+        .actions,
+        .filters {
+          justify-content: flex-start;
+        }
+
+        .metrics {
+          grid-template-columns: 1fr 1fr;
+        }
+
+        .grid {
+          min-width: 880px;
+        }
+
+        .grid-wrap,
+        .split-main {
+          overflow-x: auto;
+        }
+
+        .category-rail,
+        .split-detail {
+          border: 0;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="board">
+      <section class="intro">
+        <p class="eyebrow">THE BAR · MENU LIST GRID DESIGN PROPOSALS</p>
+        <h1>메뉴 목록 그리드 개선안 2가지</h1>
+        <p>
+          목표는 그리드 안에 모든 수정 컨트롤을 항상 펼쳐 놓지 않고, 기본 상태는 읽기 좋게 만들며,
+          수정이 필요할 때만 컨트롤을 노출하는 것입니다. 두 안 모두 “목록 변경 저장” 한 번으로 반영하는 흐름을 기준으로 합니다.
+        </p>
+      </section>
+
+      <section class="concept" aria-labelledby="concept-a-title">
+        <header class="concept-header">
+          <div class="concept-title">
+            <p class="eyebrow">CONCEPT A</p>
+            <h2 id="concept-a-title">Clean Data Grid · 기본은 읽기, 선택 행만 편집</h2>
+            <p class="caption">상용 백오피스에서 가장 익숙한 형태입니다. 전체 행은 깔끔하게 읽고, 선택/수정 중인 행에만 select와 배지 컨트롤을 보여줍니다.</p>
+          </div>
+          <div class="actions">
+            <button class="btn ghost">필터</button>
+            <button class="btn ghost">발행</button>
+            <span class="save-state">미저장 2개</span>
+            <button class="btn primary">목록 변경 저장</button>
+            <button class="btn primary">메뉴 등록</button>
+          </div>
+        </header>
+
+        <div class="toolbar">
+          <div class="search">⌕ 이름, 설명, 카테고리 검색</div>
+          <div class="filters">
+            <span class="filter-chip">전체 카테고리</span>
+            <span class="filter-chip">전체 유형</span>
+            <span class="filter-chip">판매 중</span>
+            <span class="filter-chip">노출</span>
+            <span class="filter-chip">배지 전체</span>
+          </div>
+        </div>
+
+        <div class="metrics" aria-label="메뉴 현황">
+          <div class="metric"><span>전체</span><strong>128</strong></div>
+          <div class="metric"><span>노출</span><strong>119</strong></div>
+          <div class="metric"><span>품절</span><strong>7</strong></div>
+          <div class="metric"><span>숨김</span><strong>9</strong></div>
+        </div>
+
+        <div class="grid-wrap">
+          <table class="grid">
+            <colgroup>
+              <col style="width: 86px" />
+              <col style="width: 290px" />
+              <col style="width: 180px" />
+              <col style="width: 140px" />
+              <col style="width: 190px" />
+              <col style="width: 150px" />
+              <col style="width: 130px" />
+              <col style="width: 120px" />
+            </colgroup>
+            <thead>
+              <tr>
+                <th>순서</th>
+                <th>메뉴</th>
+                <th>카테고리</th>
+                <th>대표 가격</th>
+                <th>배지</th>
+                <th>상태</th>
+                <th>수정</th>
+                <th>작업</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><span class="pill">01</span></td>
+                <td>
+                  <div class="menu-name">
+                    <strong>맥캘란 12</strong>
+                    <span>위스키 · 싱글몰트 · 셰리 오크</span>
+                  </div>
+                </td>
+                <td><span class="pill">위스키 / 싱글몰트</span></td>
+                <td><span class="price">18,000</span></td>
+                <td><span class="pill amber">시그니처</span></td>
+                <td><span class="pill green">판매 중 · 노출</span></td>
+                <td><span class="sub">admin1 · 오늘</span></td>
+                <td><div class="row-actions"><button class="btn ghost">상세</button></div></td>
+              </tr>
+              <tr class="is-editing is-dirty">
+                <td>
+                  <div class="pill-row">
+                    <button class="icon-btn">↑</button>
+                    <button class="icon-btn">↓</button>
+                  </div>
+                </td>
+                <td>
+                  <div class="menu-name">
+                    <strong>하우스 하이볼</strong>
+                    <span>수정 중 · 저장 전 화면 반영</span>
+                  </div>
+                </td>
+                <td><div class="edit-cell">칵테일 / 하이볼 <span>⌄</span></div></td>
+                <td><span class="price">12,000</span></td>
+                <td><div class="edit-cell">추천, 시그니처 <span>＋</span></div></td>
+                <td><div class="edit-cell">판매 중 · 노출 <span>⌄</span></div></td>
+                <td><span class="sub">저장 전</span></td>
+                <td><div class="row-actions"><button class="btn soft">편집 중</button></div></td>
+              </tr>
+              <tr>
+                <td><span class="pill">03</span></td>
+                <td>
+                  <div class="menu-name">
+                    <strong>치즈 플레이트</strong>
+                    <span>푸드 · 플레이트</span>
+                  </div>
+                </td>
+                <td><span class="pill">푸드</span></td>
+                <td><span class="price">24,000</span></td>
+                <td><span class="pill">배지 없음</span></td>
+                <td><span class="pill red">품절 · 숨김</span></td>
+                <td><span class="sub">manager1 · 어제</span></td>
+                <td><div class="row-actions"><button class="btn ghost">상세</button></div></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p class="note caption">
+          장점: 가장 단순하고 구현 변경이 작습니다. 단점: 카테고리 구조를 많이 타는 바에서는 카테고리 이동 맥락이 약할 수 있습니다.
+        </p>
+      </section>
+
+      <section class="concept" aria-labelledby="concept-b-title">
+        <header class="concept-header">
+          <div class="concept-title">
+            <p class="eyebrow">CONCEPT B</p>
+            <h2 id="concept-b-title">Category Workbench · 좌측 카테고리, 중앙 그리드, 우측 선택 상세</h2>
+            <p class="caption">메뉴가 많아질수록 유리합니다. 카테고리 탐색을 좌측에 고정하고, 그리드는 현재 카테고리 메뉴만 보여줍니다.</p>
+          </div>
+          <div class="actions">
+            <span class="save-state">미저장 1개</span>
+            <button class="btn primary">목록 변경 저장</button>
+            <button class="btn primary">메뉴 등록</button>
+          </div>
+        </header>
+
+        <div class="split">
+          <aside class="category-rail" aria-label="카테고리">
+            <h3>카테고리</h3>
+            <div class="rail-item"><span>전체 메뉴</span><strong>128</strong></div>
+            <div class="rail-item active"><span>위스키</span><strong>42</strong></div>
+            <div class="rail-item"><span>싱글몰트</span><strong>24</strong></div>
+            <div class="rail-item"><span>칵테일</span><strong>31</strong></div>
+            <div class="rail-item"><span>와인</span><strong>18</strong></div>
+            <div class="rail-item"><span>푸드</span><strong>13</strong></div>
+          </aside>
+
+          <section class="split-main">
+            <div class="dense-toolbar">
+              <div class="search">⌕ 위스키 메뉴 검색</div>
+              <div class="filters">
+                <span class="filter-chip">판매 중</span>
+                <span class="filter-chip">노출</span>
+                <span class="filter-chip">품절 제외</span>
+              </div>
+            </div>
+
+            <table class="grid">
+              <colgroup>
+                <col style="width: 70px" />
+                <col style="width: 260px" />
+                <col style="width: 130px" />
+                <col style="width: 130px" />
+                <col style="width: 150px" />
+                <col style="width: 100px" />
+              </colgroup>
+              <thead>
+                <tr>
+                  <th>순서</th>
+                  <th>메뉴</th>
+                  <th>대표 가격</th>
+                  <th>배지</th>
+                  <th>상태</th>
+                  <th>작업</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr class="is-dirty">
+                  <td><span class="pill">01</span></td>
+                  <td>
+                    <div class="menu-name">
+                      <strong>맥캘란 12</strong>
+                      <span>싱글몰트 · 시그니처</span>
+                    </div>
+                  </td>
+                  <td><span class="price">18,000</span></td>
+                  <td><span class="pill amber">시그니처</span></td>
+                  <td><span class="pill green">판매 중</span></td>
+                  <td><button class="btn soft">선택</button></td>
+                </tr>
+                <tr>
+                  <td><span class="pill">02</span></td>
+                  <td>
+                    <div class="menu-name">
+                      <strong>글렌모렌지 10</strong>
+                      <span>싱글몰트 · 시트러스</span>
+                    </div>
+                  </td>
+                  <td><span class="price">17,000</span></td>
+                  <td><span class="pill">배지 없음</span></td>
+                  <td><span class="pill green">판매 중</span></td>
+                  <td><button class="btn ghost">선택</button></td>
+                </tr>
+                <tr>
+                  <td><span class="pill">03</span></td>
+                  <td>
+                    <div class="menu-name">
+                      <strong>라프로익 10</strong>
+                      <span>피트 · 스모키</span>
+                    </div>
+                  </td>
+                  <td><span class="price">19,000</span></td>
+                  <td><span class="pill">배지 없음</span></td>
+                  <td><span class="pill red">품절</span></td>
+                  <td><button class="btn ghost">선택</button></td>
+                </tr>
+              </tbody>
+            </table>
+          </section>
+
+          <aside class="split-detail" aria-label="선택 메뉴 빠른 수정">
+            <div class="detail-block">
+              <p class="eyebrow">빠른 수정</p>
+              <h3>맥캘란 12</h3>
+              <p class="caption">목록은 단순하게 유지하고, 선택한 메뉴의 수정 컨트롤은 우측에 모읍니다.</p>
+            </div>
+            <div class="detail-block">
+              <div class="detail-list">
+                <div class="detail-row"><span>카테고리</span><strong>위스키 / 싱글몰트</strong></div>
+                <div class="detail-row"><span>판매 상태</span><strong>판매 중</strong></div>
+                <div class="detail-row"><span>노출</span><strong>노출</strong></div>
+                <div class="detail-row"><span>대표 가격</span><strong>18,000</strong></div>
+              </div>
+            </div>
+            <div class="detail-block">
+              <button class="btn soft">배지 변경</button>
+              <button class="btn ghost">상세 편집 열기</button>
+              <button class="btn ghost">순서 위로</button>
+              <button class="btn ghost">순서 아래로</button>
+            </div>
+          </aside>
+        </div>
+
+        <p class="note caption">
+          장점: 그리드가 가장 깨끗해지고 카테고리 작업성이 좋습니다. 단점: 현재 화면보다 구조 변경이 크고, compact에서는 우측 상세가 drawer/sheet로 바뀌어야 합니다.
+        </p>
+      </section>
+    </main>
+  </body>
+</html>

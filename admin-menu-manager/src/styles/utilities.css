@@ -6,8 +6,9 @@
 .eyebrow {
   margin: 0 0 6px;
   color: var(--color-accent);
-  font-size: 0.78rem;
-  font-weight: 700;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
   text-transform: uppercase;
 }
 
@@ -24,9 +25,14 @@
   gap: 8px;
   padding: 0 14px;
   font: inherit;
-  font-weight: 700;
+  font-weight: 750;
   text-decoration: none;
   cursor: pointer;
+  transition:
+    border-color 140ms ease,
+    background-color 140ms ease,
+    box-shadow 140ms ease,
+    color 140ms ease;
 }
 
 .icon-button {
@@ -38,10 +44,23 @@
   border-color: var(--color-accent);
   background: var(--color-accent);
   color: #ffffff;
+  box-shadow: 0 6px 16px rgba(21, 94, 239, 0.18);
 }
 
 .button.secondary {
-  background: var(--color-surface-muted);
+  background: #f8fafc;
+}
+
+.button:hover,
+.icon-button:hover {
+  border-color: var(--color-border-strong);
+  background: #f8fafc;
+}
+
+.button.primary:hover {
+  border-color: var(--color-accent-strong);
+  background: var(--color-accent-strong);
+  color: #ffffff;
 }
 
 .button.danger {
@@ -72,14 +91,18 @@
   min-height: 44px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
+  background: var(--color-surface);
   padding: 0 12px;
   color: var(--color-text);
   font: inherit;
 }
 
-.field select,
-.field textarea {
-  background: var(--color-surface);
+.field input:focus,
+.field select:focus,
+.field textarea:focus {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px rgba(21, 94, 239, 0.12);
+  outline: none;
 }
 
 .field textarea {

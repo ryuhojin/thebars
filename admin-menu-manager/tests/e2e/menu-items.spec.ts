@@ -65,7 +65,8 @@ async function createMenuThroughUi(
   await page.getByRole("button", { name: "초안 저장" }).click();
   await expect(page.getByText("신규 메뉴 초안을 저장했습니다. 최종 저장을 눌러 D1에 반영하세요.")).toBeVisible();
   await page.getByRole("button", { name: /최종 저장 1개/ }).click();
-  await expect(page).toHaveURL(new RegExp(`/bars/${barId}/menus/(?!new$)[^/]+$`));
+  await expect(page).toHaveURL(new RegExp(`/bars/${barId}/menus$`));
+  await expect(visibleMenuName(page, input.name, page.viewportSize()?.width ?? 1440)).toBeVisible();
 }
 
 async function saveMenuDraftThroughUi(
@@ -115,13 +116,33 @@ async function expectTouchTargets(page: Page) {
   expect(smallTargets).toEqual([]);
 }
 
-function menuSelectionCheckbox(page: Page, name: string, width: number) {
-  const locator = page.getByLabel(`${name} 선택`);
-  return width < 768 ? locator.last() : locator.first();
-}
-
 function visibleMenuName(page: Page, name: string, width: number) {
   return (width < 768 ? page.locator(".data-cards") : page.locator(".data-table")).getByText(name).first();
+}
+
+function visibleMenuRow(page: Page, name: string, width: number) {
+  return width < 768
+    ? page.locator(".data-card").filter({ hasText: name })
+    : page.locator(".menus-table tbody tr").filter({ hasText: name });
+}
+
+async function selectMenuForQuickEdit(page: Page, name: string, width: number) {
+  const row = visibleMenuRow(page, name, width);
+  if (width < 768) {
+    await row.getByRole("button", { name: "선택" }).click();
+    return;
+  }
+  await row.click();
+}
+
+async function openMenuEditorFromList(page: Page, name: string, width: number) {
+  const row = visibleMenuRow(page, name, width);
+  if (width < 768) {
+    await row.getByRole("button", { name: "상세" }).click();
+    return;
+  }
+  await row.click();
+  await page.locator(".menu-selection-panel").getByRole("button", { name: "편집 열기" }).click();
 }
 
 test("menu category select follows the managed category order", async ({ page }) => {
@@ -190,6 +211,39 @@ test("bulk final save clears two saved create drafts after menu list reflects th
   await expect(page.getByText(`2. ${secondName}`)).toHaveCount(0);
 });
 
+test("create draft final save shows a single validation summary", async ({ page }) => {
+  await page.request.post("/__dev/reset-auth");
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page, "admin1", "AdminPass!1");
+  const barId = await createBarThroughUi(page, "Draft Validation Bar");
+
+  await page.goto(`/bars/${barId}/categories`);
+  await createRootCategory(page, "검증");
+  await createChildCategory(page, "검증", "싱글몰트");
+
+  await page.goto(`/bars/${barId}/menus/new`);
+  await saveMenuDraftThroughUi(page, {
+    name: "임시 검증 메뉴",
+    categoryLabel: "검증 / 싱글몰트",
+    itemTypeLabel: "위스키 · 공통",
+    priceLabel: "샷",
+    amount: "18000"
+  });
+
+  await page.evaluate((currentBarId) => {
+    const key = `thebar:menu-create-drafts:v1:${currentBarId}`;
+    const drafts = JSON.parse(window.sessionStorage.getItem(key) ?? "[]") as Array<{ form: { name: string } }>;
+    if (drafts[0]) drafts[0].form.name = "";
+    window.sessionStorage.setItem(key, JSON.stringify(drafts));
+  }, barId);
+
+  await page.reload();
+  await page.getByRole("button", { name: /최종 저장 1개/ }).click();
+  await expect(page.locator(".menu-editor-panel .form-summary")).toHaveCount(1);
+  await expect(page.locator(".menu-editor-panel .form-status")).toHaveCount(0);
+  await expect(page.getByText("입력값을 확인하세요.")).toHaveCount(1);
+});
+
 for (const viewport of viewports) {
   test(`D11 menu price detail memo save at ${viewport.label}`, async ({ page }, testInfo) => {
     await page.request.post("/__dev/reset-auth");
@@ -205,6 +259,7 @@ for (const viewport of viewports) {
     await page.goto(`/bars/${barId}/menus/new`);
     await expect(page).toHaveURL(new RegExp(`/bars/${barId}/menus/new$`));
     await expect(page.getByRole("heading", { name: "새 메뉴 등록" })).toBeVisible();
+    await expect(page.locator(".page-return-row").getByRole("button", { name: "목록으로 가기" })).toBeVisible();
     await page.getByLabel("메뉴 이름").fill(`맥캘란 12 ${viewport.label}`);
     await page.getByLabel("메뉴 카테고리").selectOption({ label: `위스키 ${viewport.label} / 싱글몰트 ${viewport.label}` });
     await page.getByLabel("메뉴 설명").fill("셰리 캐스크\n기본 CRUD 검증");
@@ -245,8 +300,13 @@ for (const viewport of viewports) {
     await expect(page.getByText(`1. 맥캘란 12 ${viewport.label}`)).toBeVisible();
     await expect(page.getByText(/1개 대기/)).toBeVisible();
     await page.getByRole("button", { name: /최종 저장 1개/ }).click();
+    await expect(page).toHaveURL(new RegExp(`/bars/${barId}/menus$`));
+    await expect(page.getByRole("heading", { name: "메뉴 관리" })).toBeVisible();
+    await expect(visibleMenuName(page, `맥캘란 12 ${viewport.label}`, viewport.width)).toBeVisible();
+    await openMenuEditorFromList(page, `맥캘란 12 ${viewport.label}`, viewport.width);
     await expect(page).toHaveURL(new RegExp(`/bars/${barId}/menus/[^/]+$`));
     await expect(page.getByRole("heading", { name: "메뉴 기본 정보" })).toBeVisible();
+    await expect(page.locator(".page-return-row").getByRole("button", { name: "목록으로 가기" })).toBeVisible();
     await expect(page.getByLabel("가격 금액 1")).toHaveValue("18000");
     await expect(page.getByLabel("대표 가격 1")).toBeChecked();
     await expect(page.getByLabel("브랜드·증류소")).toHaveValue("Macallan");
@@ -277,15 +337,15 @@ for (const viewport of viewports) {
     await expect(page.getByLabel("브랜드·증류소")).toHaveValue("Macallan Estate");
     await expect(page.getByLabel("내부 메모 입력")).toHaveValue("품절 전 재고 확인");
 
-    await page.getByRole("button", { name: "목록" }).click();
+    await page.getByRole("button", { name: "목록", exact: true }).click();
     await expect(page).toHaveURL(new RegExp(`/bars/${barId}/menus$`));
     await expect(page.getByRole("heading", { name: "메뉴 관리" })).toBeVisible();
     await page.getByLabel("메뉴 검색").fill("맥캘란");
-    const visibleMenuName =
+    const editedMenuName =
       viewport.width < 768
         ? page.locator(".data-cards").getByText(`맥캘란 12 수정 ${viewport.label}`).first()
         : page.locator(".data-table").getByText(`맥캘란 12 수정 ${viewport.label}`).first();
-    await expect(visibleMenuName).toBeVisible();
+    await expect(editedMenuName).toBeVisible();
     await page.setViewportSize({ width: 390, height: 844 });
     await expect(page).toHaveURL(new RegExp(`/bars/${barId}/menus$`));
     await expect(page.getByLabel("메뉴 검색")).toHaveValue("맥캘란");
@@ -295,7 +355,7 @@ for (const viewport of viewports) {
       fullPage: true
     });
 
-    await page.getByRole("button", { name: "상세" }).click();
+    await openMenuEditorFromList(page, `맥캘란 12 수정 ${viewport.label}`, viewport.width);
     await expect(page).toHaveURL(new RegExp(`/bars/${barId}/menus/${menuItemId}$`));
     page.once("dialog", (dialog) => dialog.accept());
     await page.getByRole("button", { name: "메뉴 삭제" }).click();
@@ -342,44 +402,57 @@ for (const viewport of viewports) {
     await page.goto(`/bars/${barId}/menus`);
     await expect(page).toHaveURL(new RegExp(`/bars/${barId}/menus$`));
     await expect(page.getByRole("heading", { name: "메뉴 관리" })).toBeVisible();
+    await expect(page.locator(".menu-list-metrics span")).toHaveCount(4);
+    await expect(page.locator(".menu-category-rail")).toBeVisible();
+    await expect(page.locator(".menu-selection-panel")).toBeVisible();
+    await expect(page.locator(".menu-list-inspector")).toHaveCount(0);
+    await expect(page.locator(".menu-bulk-panel")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "목록 변경 저장" })).toBeDisabled();
     if (viewport.width >= 768) {
       const headers = await page.locator(".menus-table thead th").evaluateAll((cells) =>
         cells.map((cell) => cell.textContent?.trim() ?? "")
       );
-      expect(headers).toEqual(["노출순서", "카테고리", "메뉴명", "가격", "배지", "상태", "노출", "수정", "작업"]);
+      expect(headers).toEqual(["노출순서", "카테고리", "메뉴명", "가격", "배지", "상태", "노출"]);
     }
-    await menuSelectionCheckbox(page, macallanName, viewport.width).check();
-    await menuSelectionCheckbox(page, negroniName, viewport.width).check();
-    await page.getByLabel("일괄 판매 상태").selectOption("sold_out");
-    await page.getByLabel("일괄 노출").selectOption("hidden");
-    await page.getByLabel("일괄 카테고리 이동").selectOption({ label: `칵테일 D12 ${viewport.label}` });
-    const bulkPanel = page.locator(".menu-bulk-panel");
-    await bulkPanel.getByLabel("일괄 배지 방식").selectOption("replace");
-    await bulkPanel.getByLabel("일괄 배지 추가 선택").selectOption("system:system-badge-recommended");
-    await bulkPanel.getByRole("button", { name: "배지 추가" }).click();
-    await page.getByRole("button", { name: "선택 항목에 적용" }).click();
-    await expect(page.getByText("2개 메뉴에 일괄 변경 초안을 적용했습니다. 최종 저장을 눌러 반영하세요.")).toBeVisible();
+    await selectMenuForQuickEdit(page, macallanName, viewport.width);
+    await expect(page.locator(".menu-selection-panel").getByRole("heading", { name: macallanName })).toBeVisible();
+    await page.locator(".menu-selection-panel").getByLabel(`${macallanName} 판매 상태 빠른 변경`).selectOption("sold_out");
+    await page.locator(".menu-selection-panel").getByLabel(`${macallanName} 노출 빠른 변경`).uncheck();
+    await page.locator(".menu-selection-panel").getByLabel(`${macallanName} 카테고리 빠른 변경`).selectOption({ label: `칵테일 D12 ${viewport.label}` });
+    await page.locator(".menu-selection-panel").getByLabel(`${macallanName} 배지 추가 선택`).selectOption("system:system-badge-recommended");
+    await page.locator(".menu-selection-panel").getByRole("button", { name: "배지 추가" }).click();
+    await selectMenuForQuickEdit(page, negroniName, viewport.width);
+    await expect(page.locator(".menu-selection-panel").getByRole("heading", { name: negroniName })).toBeVisible();
+    await page.locator(".menu-selection-panel").getByLabel(`${negroniName} 판매 상태 빠른 변경`).selectOption("sold_out");
+    await page.locator(".menu-selection-panel").getByLabel(`${negroniName} 노출 빠른 변경`).uncheck();
+    await page.locator(".menu-selection-panel").getByLabel(`${negroniName} 배지 추가 선택`).selectOption("system:system-badge-recommended");
+    await page.locator(".menu-selection-panel").getByRole("button", { name: "배지 추가" }).click();
+    await expect(page.locator(".menus-toolbar .status-badge").filter({ hasText: "미저장 2개" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "목록 변경 저장" })).toBeEnabled();
 
     await page.setViewportSize({ width: 390, height: 844 });
     await expect(page).toHaveURL(new RegExp(`/bars/${barId}/menus$`));
-    await expect(menuSelectionCheckbox(page, macallanName, 390)).toBeChecked();
-    await expect(menuSelectionCheckbox(page, negroniName, 390)).toBeChecked();
-    await expect(page.getByText(/미저장 변경 2개/)).toBeVisible();
+    await selectMenuForQuickEdit(page, macallanName, 390);
+    await expect(page.locator(".menu-selection-panel").getByLabel(`${macallanName} 판매 상태 빠른 변경`)).toHaveValue("sold_out");
+    await expect(page.locator(".menu-selection-panel").getByLabel(`${macallanName} 노출 빠른 변경`)).not.toBeChecked();
+    await expect(page.locator(".menus-toolbar .status-badge").filter({ hasText: "미저장 2개" })).toBeVisible();
     await page.screenshot({
       path: testInfo.outputPath(`d12-bulk-draft-${viewport.label}.png`),
       fullPage: true
     });
 
     await page.setViewportSize({ width: viewport.width, height: viewport.height });
-    await page.getByRole("button", { name: /최종 저장 2개/ }).click();
+    await page.getByRole("button", { name: "목록 변경 저장" }).click();
     await expect(page.getByText("2개 메뉴를 저장했습니다.")).toBeVisible();
     await page.getByLabel("판매 상태 필터").selectOption("sold_out");
     await page.getByLabel("노출 필터").selectOption("hidden");
     await page.getByLabel("배지 필터").selectOption("system:system-badge-recommended");
     await expect(visibleMenuName(page, macallanName, viewport.width)).toBeVisible();
     await expect(visibleMenuName(page, negroniName, viewport.width)).toBeVisible();
-    await page.getByRole("button", { name: "카테고리 보기" }).click();
-    await expect(page.getByRole("heading", { name: `칵테일 D12 ${viewport.label}` })).toBeVisible();
+    await page.locator(".menu-category-rail-item").filter({ hasText: `칵테일 D12 ${viewport.label}` }).click();
+    await expect(page.locator(".menu-category-rail-item[data-selected='true']")).toContainText(`칵테일 D12 ${viewport.label}`);
+    await expect(visibleMenuName(page, macallanName, viewport.width)).toBeVisible();
+    await expect(visibleMenuName(page, negroniName, viewport.width)).toBeVisible();
     await expectNoHorizontalOverflow(page);
     await expectTouchTargets(page);
     await page.screenshot({

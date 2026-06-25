@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import type { DashboardBar, DashboardMetric, DashboardQuickAction, DashboardResponse } from "../../../contracts/dashboard";
-import { AuthApiError, logout } from "../auth/authApi";
+import { AuthApiError } from "../auth/authApi";
 import { readDashboard } from "./dashboardApi";
 
 type Navigate = (path: string) => void;
@@ -93,7 +93,6 @@ function DashboardReadyView({
   onSelectBar: (barId: string) => void;
   navigate: Navigate;
 }) {
-  const [isLoggingOut, setIsLoggingOut] = useState(false);
   const selectedBar = useMemo(
     () => data.accessibleBars.find((bar) => bar.id === selectedBarId) ?? null,
     [data.accessibleBars, selectedBarId]
@@ -112,17 +111,6 @@ function DashboardReadyView({
           <span>현재 사용자</span>
           <strong>{data.actor.username}</strong>
           <small>{data.mode === "system-admin" ? "시스템 관리자" : "바 운영자"}</small>
-          <button
-            className="button secondary"
-            type="button"
-            disabled={isLoggingOut}
-            onClick={() => {
-              setIsLoggingOut(true);
-              logout().finally(() => navigate("/login"));
-            }}
-          >
-            {isLoggingOut ? "로그아웃 중" : "로그아웃"}
-          </button>
         </div>
       </section>
 

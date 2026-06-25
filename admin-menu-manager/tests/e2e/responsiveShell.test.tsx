@@ -310,19 +310,17 @@ describe("admin responsive shell", () => {
     expect(window.location.pathname).toBe("/bars/bar-1/menus");
     expect(await screen.findByRole("heading", { name: "메뉴 관리" })).toBeInTheDocument();
     expect(screen.getByLabelText("메뉴 검색")).toBeInTheDocument();
-    expect(screen.getByLabelText("카테고리 필터")).toBeInTheDocument();
+    expect(screen.getByLabelText("카테고리 선택")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /전체 메뉴/ })).toBeInTheDocument();
   });
 
-  it("preserves menu filters and selection during resize", async () => {
+  it("preserves menu filters during resize", async () => {
     const user = userEvent.setup();
     window.history.pushState(null, "", "/bars/bar-1/menus");
     setViewport(1440, 900);
     render(<AdminApp />);
 
     await screen.findByRole("heading", { name: "메뉴 관리" });
-    const secondSelectButton = screen.getAllByRole("button", { name: "선택" }).at(1);
-    expect(secondSelectButton).toBeDefined();
-    await user.click(secondSelectButton as HTMLElement);
     await user.type(screen.getByLabelText("메뉴 검색"), "네");
     await user.selectOptions(screen.getByLabelText("판매 상태 필터"), "available");
 
@@ -331,7 +329,6 @@ describe("admin responsive shell", () => {
     expect(window.location.pathname).toBe("/bars/bar-1/menus");
     expect(screen.getByLabelText("메뉴 검색")).toHaveValue("네");
     expect(screen.getByLabelText("판매 상태 필터")).toHaveValue("available");
-    expect(screen.getByText(/현재 행: 네그로니/)).toBeInTheDocument();
   });
 
   it("preserves D12 menu filters, selection, and unsaved bulk drafts during resize", async () => {
@@ -344,10 +341,8 @@ describe("admin responsive shell", () => {
     await user.type(screen.getByLabelText("메뉴 검색"), "맥");
     await user.selectOptions(screen.getByLabelText("품목 유형 필터"), "system:system-type-whisky");
     await user.selectOptions(screen.getByLabelText("배지 필터"), "system:system-badge-recommended");
-    await user.click(screen.getAllByLabelText("맥캘란 12 선택")[0] as HTMLElement);
     await user.selectOptions(screen.getAllByLabelText("맥캘란 12 판매 상태 빠른 변경")[0] as HTMLElement, "sold_out");
-    await user.selectOptions(screen.getByLabelText("일괄 카테고리 이동"), "category-cocktail");
-    await user.click(screen.getByRole("button", { name: "선택 항목에 적용" }));
+    await user.selectOptions(screen.getAllByLabelText("맥캘란 12 카테고리 빠른 변경")[0] as HTMLElement, "category-cocktail");
 
     setViewport(390, 844);
 
@@ -355,14 +350,13 @@ describe("admin responsive shell", () => {
     expect(screen.getByLabelText("메뉴 검색")).toHaveValue("맥");
     expect(screen.getByLabelText("품목 유형 필터")).toHaveValue("system:system-type-whisky");
     expect(screen.getByLabelText("배지 필터")).toHaveValue("system:system-badge-recommended");
-    expect(screen.getAllByLabelText("맥캘란 12 선택").some((input) => (input as HTMLInputElement).checked)).toBe(true);
     expect(
       screen
         .getAllByLabelText("맥캘란 12 판매 상태 빠른 변경")
         .some((select) => select instanceof HTMLSelectElement && select.value === "sold_out")
     ).toBe(true);
-    expect(screen.getByText(/미저장 변경 1개/)).toBeInTheDocument();
-    expect(screen.getByText(/최종 저장 전/)).toBeInTheDocument();
+    expect(screen.getAllByText(/미저장 1개/).length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: "목록 변경 저장" })).toBeEnabled();
   });
 
   it.each(viewports)("renders the same preview URL at $label", async ({ width, height }) => {

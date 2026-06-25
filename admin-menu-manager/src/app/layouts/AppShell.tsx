@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import type { DashboardBar, DashboardResponse } from "../../../contracts/dashboard";
 import type { CurrentBarPermissionsResponse } from "../../../contracts/memberships";
+import { logout } from "../../features/auth/authApi";
 import { readDashboard } from "../../features/dashboard/dashboardApi";
 import { readCurrentPermissions } from "../../features/memberships/membershipsApi";
 import type { AdminRoute } from "../router/routes";
@@ -15,6 +16,7 @@ export function AppShell({ route, children }: AppShellProps) {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [shellData, setShellData] = useState<ShellData>({ status: "loading" });
   const [selectedBarId, setSelectedBarId] = useState<string>(() => readStoredSelectedBarId());
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   const currentBarId = extractBarId(window.location.pathname);
 
@@ -112,6 +114,17 @@ export function AppShell({ route, children }: AppShellProps) {
         <div className="account-chip" aria-label={`로그인 계정 ${actorLabel}`} title={actorLabel}>
           {actorLabel}
         </div>
+        <button
+          className="button secondary header-logout-button"
+          type="button"
+          disabled={isLoggingOut}
+          onClick={() => {
+            setIsLoggingOut(true);
+            logout().finally(() => navigate("/login"));
+          }}
+        >
+          {isLoggingOut ? "로그아웃 중" : "로그아웃"}
+        </button>
       </header>
 
       <div className="shell-body">
@@ -307,22 +320,7 @@ function isActiveNavItem(activePath: string, itemPath: string): boolean {
       activePath === "/bars/{barId}/menus/{menuItemId}"
     );
   }
-  return (
-    itemPath === "/bars" &&
-    (activePath === "/bars/{barId}" ||
-      activePath === "/bars/{barId}/members" ||
-      activePath === "/bars/{barId}/settings" ||
-      activePath === "/bars/{barId}/categories" ||
-      activePath === "/bars/{barId}/menus" ||
-      activePath === "/bars/{barId}/menus/new" ||
-      activePath === "/bars/{barId}/menus/{menuItemId}" ||
-      activePath === "/bars/{barId}/preview" ||
-      activePath === "/bars/{barId}/publications" ||
-      activePath === "/bars/{barId}/orders" ||
-      activePath === "/bars/{barId}/orders/new" ||
-      activePath === "/bars/{barId}/orders/{orderTabId}" ||
-      activePath === "/bars/{barId}/settlements")
-  );
+  return false;
 }
 
 function extractBarId(pathname: string): string {

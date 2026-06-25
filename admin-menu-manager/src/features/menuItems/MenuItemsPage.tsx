@@ -53,17 +53,8 @@ type PriceForm = {
 };
 
 type EditorMode = "creating" | "editing";
-type ListMode = "all" | "category";
 type BulkSaveState = "idle" | "saving" | "error" | "success";
 type MenuListDraft = Omit<BulkMenuItemChange, "menuItemId">;
-type BadgeMode = "keep" | "replace" | "clear";
-type BulkForm = {
-  saleStatus: "keep" | "available" | "sold_out";
-  visibility: "keep" | "visible" | "hidden";
-  categoryId: "keep" | string;
-  badgeMode: BadgeMode;
-  badges: MenuBadgeSelection[];
-};
 type MenuCreateDraft = {
   clientDraftId: string;
   form: MenuForm;
@@ -79,17 +70,8 @@ export function MenuItemsPage({ barId, navigate }: { barId: string; navigate: Na
   const [saleFilter, setSaleFilter] = useState<"all" | "available" | "sold_out">("all");
   const [visibilityFilter, setVisibilityFilter] = useState<"all" | "visible" | "hidden">("all");
   const [badgeFilter, setBadgeFilter] = useState("all");
-  const [listMode, setListMode] = useState<ListMode>("all");
-  const [selectedId, setSelectedId] = useState("");
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  const [selectedMenuId, setSelectedMenuId] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<Record<string, MenuListDraft>>({});
-  const [bulkForm, setBulkForm] = useState<BulkForm>({
-    saleStatus: "keep",
-    visibility: "keep",
-    categoryId: "keep",
-    badgeMode: "keep",
-    badges: []
-  });
   const [bulkMessage, setBulkMessage] = useState("");
   const [saveState, setSaveState] = useState<BulkSaveState>("idle");
   const draftCount = Object.keys(drafts).length;
@@ -102,8 +84,6 @@ export function MenuItemsPage({ barId, navigate }: { barId: string; navigate: Na
       .then((data) => {
         if (cancelled) return;
         const itemIds = new Set(data.items.map((item) => item.id));
-        setSelectedId((current) => (data.items.some((item) => item.id === current) ? current : data.items[0]?.id ?? ""));
-        setSelectedIds((current) => new Set([...current].filter((id) => itemIds.has(id))));
         setDrafts((current) => {
           const next: Record<string, MenuListDraft> = {};
           for (const [id, draft] of Object.entries(current)) {
@@ -129,11 +109,19 @@ export function MenuItemsPage({ barId, navigate }: { barId: string; navigate: Na
   const filteredItems = effectiveItems.filter((item) =>
     menuMatchesFilters(item, { query, categoryFilter, itemTypeFilter, saleFilter, visibilityFilter, badgeFilter })
   );
-  const categoryGroups = groupItemsByCategory(filteredItems);
-  const selectedItem = effectiveItems.find((item) => item.id === selectedId) ?? null;
-  const selectedFilteredCount = filteredItems.filter((item) => selectedIds.has(item.id)).length;
-  const allFilteredSelected = filteredItems.length > 0 && selectedFilteredCount === filteredItems.length;
+  const categoryCounts = countMenusByCategory(effectiveItems);
+  const selectedItem = filteredItems.find((item) => item.id === selectedMenuId) ?? filteredItems[0] ?? null;
+  const selectedSiblingIndex = selectedItem
+    ? effectiveItems
+        .filter((entry) => entry.categoryId === selectedItem.categoryId)
+        .sort((left, right) => left.sortOrder - right.sortOrder || left.name.localeCompare(right.name, "ko"))
+        .findIndex((entry) => entry.id === selectedItem.id)
+    : -1;
+  const selectedSiblingCount = selectedItem ? effectiveItems.filter((entry) => entry.categoryId === selectedItem.categoryId).length : 0;
   const saveDisabled = !canEdit || draftCount === 0 || saveState === "saving";
+  const visibleCount = effectiveItems.filter((item) => item.isVisible).length;
+  const soldOutCount = effectiveItems.filter((item) => item.saleStatus === "sold_out").length;
+  const hiddenCount = effectiveItems.length - visibleCount;
 
   const updateDraft = (menuItemId: string, patch: MenuListDraft) => {
     const source = state.data.items.find((item) => item.id === menuItemId);
@@ -141,26 +129,6 @@ export function MenuItemsPage({ barId, navigate }: { barId: string; navigate: Na
     setDrafts((current) => withMenuDraft(current, source, patch));
     setSaveState("idle");
     setBulkMessage("미저장 변경사항이 있습니다. 최종 저장을 눌러 반영하세요.");
-  };
-
-  const toggleSelected = (menuItemId: string, checked: boolean) => {
-    setSelectedIds((current) => {
-      const next = new Set(current);
-      if (checked) next.add(menuItemId);
-      else next.delete(menuItemId);
-      return next;
-    });
-  };
-
-  const toggleAllFiltered = (checked: boolean) => {
-    setSelectedIds((current) => {
-      const next = new Set(current);
-      filteredItems.forEach((item) => {
-        if (checked) next.add(item.id);
-        else next.delete(item.id);
-      });
-      return next;
-    });
   };
 
   const moveItem = (menuItemId: string, direction: -1 | 1) => {
@@ -174,31 +142,6 @@ export function MenuItemsPage({ barId, navigate }: { barId: string; navigate: Na
     if (index < 0 || !target) return;
     updateDraft(item.id, { sortOrder: target.sortOrder });
     updateDraft(target.id, { sortOrder: item.sortOrder });
-  };
-
-  const applyBulkDraft = () => {
-    const targetIds = [...selectedIds].filter((id) => state.data.items.some((item) => item.id === id));
-    if (!targetIds.length) {
-      setSaveState("error");
-      setBulkMessage("변경할 메뉴를 선택하세요.");
-      return;
-    }
-    const patch = bulkFormToDraft(bulkForm);
-    if (Object.keys(patch).length === 0) {
-      setSaveState("error");
-      setBulkMessage("선택한 메뉴에 적용할 변경 항목을 고르세요.");
-      return;
-    }
-    setDrafts((current) => {
-      let next = current;
-      for (const id of targetIds) {
-        const source = state.data.items.find((item) => item.id === id);
-        if (source) next = withMenuDraft(next, source, patch);
-      }
-      return next;
-    });
-    setSaveState("idle");
-    setBulkMessage(`${targetIds.length}개 메뉴에 일괄 변경 초안을 적용했습니다. 최종 저장을 눌러 반영하세요.`);
   };
 
   const revertDrafts = () => {
@@ -220,7 +163,6 @@ export function MenuItemsPage({ barId, navigate }: { barId: string; navigate: Na
       .then((data) => {
         setState({ status: "ready", data });
         setDrafts({});
-        setSelectedIds(new Set());
         setSaveState("success");
         setBulkMessage(`${data.bulk.impactCount}개 메뉴를 저장했습니다.`);
       })
@@ -270,178 +212,149 @@ export function MenuItemsPage({ barId, navigate }: { barId: string; navigate: Na
             <button className="button secondary" type="button" onClick={() => navigate(`/bars/${barId}/publications`)}>
               발행
             </button>
+            <span className={draftCount ? "status-badge locked" : "status-badge active"}>
+              {draftCount ? `미저장 ${draftCount}개` : "변경 없음"}
+            </span>
+            <button className="button primary" type="button" disabled={saveDisabled} onClick={saveDrafts}>
+              {saveState === "saving" ? "저장 중" : "목록 변경 저장"}
+            </button>
             <button className="button primary" type="button" disabled={!canEdit} onClick={() => navigate(`/bars/${barId}/menus/new`)}>
               메뉴 등록
             </button>
           </div>
         </div>
 
-        <nav className="menus-view-tabs" aria-label="메뉴 목록 보기">
-          <button className={listMode === "all" ? "is-active" : ""} type="button" onClick={() => setListMode("all")}>
-            전체 목록
-          </button>
-          <button className={listMode === "category" ? "is-active" : ""} type="button" onClick={() => setListMode("category")}>
-            카테고리 보기
-          </button>
-        </nav>
+        <div className="menu-workbench">
+          <MenuCategoryRail
+            categories={leafCategories}
+            counts={categoryCounts}
+            selectedCategoryId={categoryFilter}
+            totalCount={effectiveItems.length}
+            onSelect={setCategoryFilter}
+          />
 
-        <div className="menu-filter-grid">
-          <label className="field">
-            <span>메뉴 검색</span>
-            <input
-              aria-label="메뉴 검색"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="이름, 설명, 카테고리"
-            />
-          </label>
-          <label className="field">
-            <span>카테고리 필터</span>
-            <select aria-label="카테고리 필터" value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}>
-              <option value="all">전체 카테고리</option>
-              {state.data.categories.map((category) => (
-                <option key={category.id} value={category.id}>
-                  {category.path}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="field">
-            <span>품목 유형 필터</span>
-            <select aria-label="품목 유형 필터" value={itemTypeFilter} onChange={(event) => setItemTypeFilter(event.target.value)}>
-              <option value="all">전체 유형</option>
-              {state.data.itemTypes.map((type) => (
-                <option key={`${type.source}:${type.id}`} value={`${type.source}:${type.id}`}>
-                  {type.name} · {type.source === "system" ? "공통" : "바 전용"}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="field">
-            <span>판매 상태 필터</span>
-            <select
-              aria-label="판매 상태 필터"
-              value={saleFilter}
-              onChange={(event) => setSaleFilter(event.target.value as "all" | "available" | "sold_out")}
-            >
-              <option value="all">전체 상태</option>
-              <option value="available">판매 중</option>
-              <option value="sold_out">품절</option>
-            </select>
-          </label>
-          <label className="field">
-            <span>노출 필터</span>
-            <select
-              aria-label="노출 필터"
-              value={visibilityFilter}
-              onChange={(event) => setVisibilityFilter(event.target.value as "all" | "visible" | "hidden")}
-            >
-              <option value="all">전체 노출</option>
-              <option value="visible">노출</option>
-              <option value="hidden">숨김</option>
-            </select>
-          </label>
-          <label className="field">
-            <span>배지 필터</span>
-            <select aria-label="배지 필터" value={badgeFilter} onChange={(event) => setBadgeFilter(event.target.value)}>
-              <option value="all">전체 배지</option>
-              {state.data.badgeOptions.map((badge) => (
-                <option key={`${badge.source}:${badge.id}`} value={`${badge.source}:${badge.id}`}>
-                  {badge.name} · {badge.source === "system" ? "공통" : "바 전용"}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-
-        {state.data.items.length === 0 ? (
-          <div className="dashboard-empty" role="status">
-            <strong>등록된 메뉴가 없습니다.</strong>
-            <p>leaf 카테고리를 만든 뒤 첫 메뉴를 등록하세요.</p>
-            <div className="table-actions">
-              <button className="button secondary" type="button" onClick={() => navigate(`/bars/${barId}/categories`)}>
-                카테고리 관리
-              </button>
-              <button
-                className="button primary"
-                type="button"
-                disabled={!state.data.canEdit}
-                onClick={() => navigate(`/bars/${barId}/menus/new`)}
-              >
-                메뉴 등록
-              </button>
+          <div className="menu-workbench-main">
+            <div className="menu-list-metrics" aria-label="메뉴 목록 요약">
+              <span>
+                전체 <strong>{effectiveItems.length}개</strong>
+              </span>
+              <span>
+                노출 <strong>{visibleCount}개</strong>
+              </span>
+              <span>
+                품절 <strong>{soldOutCount}개</strong>
+              </span>
+              <span>
+                숨김 <strong>{hiddenCount}개</strong>
+              </span>
             </div>
-          </div>
-        ) : filteredItems.length === 0 ? (
-          <div className="dashboard-empty" role="status">
-            <strong>조건에 맞는 메뉴가 없습니다.</strong>
-            <p>검색어 또는 필터를 조정하세요.</p>
-          </div>
-        ) : (
-          <>
-            <MenuBulkPanel
-              canEdit={canEdit}
-              selectedCount={selectedIds.size}
-              draftCount={draftCount}
-              categories={leafCategories}
-              badgeOptions={state.data.badgeOptions}
-              form={bulkForm}
-              message={bulkMessage}
-              saveState={saveState}
-              saveDisabled={saveDisabled}
-              onChange={setBulkForm}
-              onApply={applyBulkDraft}
-              onSave={saveDrafts}
-              onRevert={revertDrafts}
-            />
-            {listMode === "category" ? (
-              <div className="category-menu-groups" aria-label="카테고리별 메뉴 목록">
-                {categoryGroups.map((group) => (
-                  <section className="category-menu-group" key={group.categoryId} aria-labelledby={`category-group-${group.categoryId}`}>
-                    <div className="category-menu-heading">
-                      <h3 id={`category-group-${group.categoryId}`}>{group.categoryPath}</h3>
-                      <span className="status-badge">{group.items.length}개</span>
-                    </div>
-                    <MenuItemsDataView
-                      items={group.items}
-                      activeId={selectedId}
-                      selectedIds={selectedIds}
-                      allFilteredSelected={allFilteredSelected}
-                      canEdit={canEdit}
-                      categories={leafCategories}
-                      badgeOptions={state.data.badgeOptions}
-                      onSelect={setSelectedId}
-                      onToggleSelected={toggleSelected}
-                      onToggleAll={toggleAllFiltered}
-                      onDraft={updateDraft}
-                      onMove={moveItem}
-                      onOpen={(menuItemId) => navigate(`/bars/${barId}/menus/${menuItemId}`)}
-                    />
-                  </section>
-                ))}
+
+            <div className="menu-filter-grid">
+              <label className="field">
+                <span>메뉴 검색</span>
+                <input
+                  aria-label="메뉴 검색"
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="이름, 설명, 카테고리"
+                />
+              </label>
+              <label className="field">
+                <span>품목 유형 필터</span>
+                <select aria-label="품목 유형 필터" value={itemTypeFilter} onChange={(event) => setItemTypeFilter(event.target.value)}>
+                  <option value="all">전체 유형</option>
+                  {state.data.itemTypes.map((type) => (
+                    <option key={`${type.source}:${type.id}`} value={`${type.source}:${type.id}`}>
+                      {type.name} · {type.source === "system" ? "공통" : "바 전용"}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="field">
+                <span>판매 상태 필터</span>
+                <select
+                  aria-label="판매 상태 필터"
+                  value={saleFilter}
+                  onChange={(event) => setSaleFilter(event.target.value as "all" | "available" | "sold_out")}
+                >
+                  <option value="all">전체 상태</option>
+                  <option value="available">판매 중</option>
+                  <option value="sold_out">품절</option>
+                </select>
+              </label>
+              <label className="field">
+                <span>노출 필터</span>
+                <select
+                  aria-label="노출 필터"
+                  value={visibilityFilter}
+                  onChange={(event) => setVisibilityFilter(event.target.value as "all" | "visible" | "hidden")}
+                >
+                  <option value="all">전체 노출</option>
+                  <option value="visible">노출</option>
+                  <option value="hidden">숨김</option>
+                </select>
+              </label>
+              <label className="field">
+                <span>배지 필터</span>
+                <select aria-label="배지 필터" value={badgeFilter} onChange={(event) => setBadgeFilter(event.target.value)}>
+                  <option value="all">전체 배지</option>
+                  {state.data.badgeOptions.map((badge) => (
+                    <option key={`${badge.source}:${badge.id}`} value={`${badge.source}:${badge.id}`}>
+                      {badge.name} · {badge.source === "system" ? "공통" : "바 전용"}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
+            {state.data.items.length === 0 ? (
+              <div className="dashboard-empty" role="status">
+                <strong>등록된 메뉴가 없습니다.</strong>
+                <p>leaf 카테고리를 만든 뒤 첫 메뉴를 등록하세요.</p>
+                <div className="table-actions">
+                  <button className="button secondary" type="button" onClick={() => navigate(`/bars/${barId}/categories`)}>
+                    카테고리 관리
+                  </button>
+                  <button
+                    className="button primary"
+                    type="button"
+                    disabled={!state.data.canEdit}
+                    onClick={() => navigate(`/bars/${barId}/menus/new`)}
+                  >
+                    메뉴 등록
+                  </button>
+                </div>
+              </div>
+            ) : filteredItems.length === 0 ? (
+              <div className="dashboard-empty" role="status">
+                <strong>조건에 맞는 메뉴가 없습니다.</strong>
+                <p>검색어 또는 필터를 조정하세요.</p>
               </div>
             ) : (
-              <MenuItemsDataView
-                items={filteredItems}
-                activeId={selectedId}
-                selectedIds={selectedIds}
-                allFilteredSelected={allFilteredSelected}
-                canEdit={canEdit}
-                categories={leafCategories}
-                badgeOptions={state.data.badgeOptions}
-                onSelect={setSelectedId}
-                onToggleSelected={toggleSelected}
-                onToggleAll={toggleAllFiltered}
-                onDraft={updateDraft}
-                onMove={moveItem}
-                onOpen={(menuItemId) => navigate(`/bars/${barId}/menus/${menuItemId}`)}
-              />
+              <>
+                {bulkMessage ? <div className={`form-status ${saveState === "success" ? "success" : ""}`} role="alert">{bulkMessage}</div> : null}
+                <MenuItemsDataView
+                  items={filteredItems}
+                  selectedId={selectedItem?.id ?? ""}
+                  onSelect={setSelectedMenuId}
+                  onOpen={(menuItemId) => navigate(`/bars/${barId}/menus/${menuItemId}`)}
+                />
+              </>
             )}
-            <div className="selected-bar-summary" role="status">
-              현재 행: {selectedItem?.name ?? "없음"} · 화면 선택 {selectedFilteredCount}개 / 전체 선택 {selectedIds.size}개
-            </div>
-          </>
-        )}
+          </div>
+
+          <MenuSelectionPanel
+            item={selectedItem}
+            canEdit={canEdit}
+            categories={leafCategories}
+            badgeOptions={state.data.badgeOptions}
+            canMoveUp={selectedSiblingIndex > 0}
+            canMoveDown={selectedSiblingIndex >= 0 && selectedSiblingIndex < selectedSiblingCount - 1}
+            onDraft={updateDraft}
+            onMove={moveItem}
+            onOpen={(menuItemId) => navigate(`/bars/${barId}/menus/${menuItemId}`)}
+          />
+        </div>
       </section>
     </div>
   );
@@ -508,6 +421,9 @@ export function MenuItemEditorPage({
   const selectedType = state.data.itemTypes.find((type) => `${type.source}:${type.id}` === form.itemTypeKey) ?? null;
   const selectedTemplate = selectedType?.template ?? "general";
   const templateResetRequired = original.details.template !== selectedTemplate && detailsHasContent(original.details);
+  const hasFieldErrors = Object.keys(errors).length > 0;
+  const errorSummaryMessage = hasFieldErrors ? (message && message !== "입력값을 확인하세요." ? message : "입력값을 확인하세요.") : "";
+  const statusMessage = hasFieldErrors ? "" : message;
   const setStoredCreateDrafts = (updater: (current: MenuCreateDraft[]) => MenuCreateDraft[]) => {
     const next = updater(createDrafts);
     writeCreateDrafts(barId, next);
@@ -606,9 +522,7 @@ export function MenuItemEditorPage({
         setState({ status: "ready", data });
         setStatus("idle");
         setMessage(`${data.bulk.impactCount}개 신규 메뉴를 최종 저장했습니다.`);
-        const onlyCreated = data.bulk.created[0];
-        if (data.bulk.created.length === 1 && onlyCreated) navigate(`/bars/${barId}/menus/${onlyCreated.menuItemId}`);
-        else navigate(`/bars/${barId}/menus`);
+        navigate(`/bars/${barId}/menus`);
       })
       .catch((error: unknown) => handleFormError(error, setErrors, setMessage, setStatus));
   };
@@ -692,6 +606,11 @@ export function MenuItemEditorPage({
 
   return (
     <form className="menu-editor-page" onSubmit={save} noValidate>
+      <div className="page-return-row">
+        <button className="button secondary" type="button" onClick={() => confirmDiscard(dirty, () => navigate(`/bars/${barId}/menus`))}>
+          목록으로 가기
+        </button>
+      </div>
       <section className="hero-panel" aria-labelledby="menu-editor-title">
         <div>
           <p className="eyebrow">메뉴 편집</p>
@@ -739,12 +658,12 @@ export function MenuItemEditorPage({
             </span>
           </div>
 
-          {Object.keys(errors).length > 0 ? (
+          {errorSummaryMessage ? (
             <div className="form-summary" role="alert">
-              입력값을 확인하세요.
+              {errorSummaryMessage}
             </div>
           ) : null}
-          {message ? <div className={`form-status ${status === "idle" ? "success" : ""}`} role="alert">{message}</div> : null}
+          {statusMessage ? <div className={`form-status ${status === "idle" ? "success" : ""}`} role="alert">{statusMessage}</div> : null}
 
           <div className="menu-editor-grid">
             <label className="field">
@@ -1127,38 +1046,206 @@ function CreateDraftPanel({
   );
 }
 
-function MenuItemsDataView({
-  items,
-  activeId,
-  selectedIds,
-  allFilteredSelected,
+function MenuCategoryRail({
+  categories,
+  counts,
+  selectedCategoryId,
+  totalCount,
+  onSelect
+}: {
+  categories: Array<{ id: string; path: string }>;
+  counts: Map<string, number>;
+  selectedCategoryId: string;
+  totalCount: number;
+  onSelect: (categoryId: string) => void;
+}) {
+  return (
+    <aside className="menu-category-rail" aria-label="카테고리 선택">
+      <div className="menu-category-rail-heading">
+        <p className="eyebrow">카테고리</p>
+        <strong>{categories.length}개</strong>
+      </div>
+      <div className="menu-category-rail-list" role="list">
+        <button
+          className="menu-category-rail-item"
+          type="button"
+          data-selected={selectedCategoryId === "all"}
+          onClick={() => onSelect("all")}
+        >
+          <span>전체 메뉴</span>
+          <strong>{totalCount}</strong>
+        </button>
+        {categories.map((category) => (
+          <button
+            className="menu-category-rail-item"
+            type="button"
+            key={category.id}
+            data-selected={category.id === selectedCategoryId}
+            onClick={() => onSelect(category.id)}
+            title={category.path}
+          >
+            <span>
+              <strong>{categoryLeafLabel(category.path)}</strong>
+              {categoryParentLabel(category.path) ? <small>{categoryParentLabel(category.path)}</small> : null}
+            </span>
+            <strong>{counts.get(category.id) ?? 0}</strong>
+          </button>
+        ))}
+      </div>
+    </aside>
+  );
+}
+
+function MenuSelectionPanel({
+  item,
   canEdit,
   categories,
   badgeOptions,
-  onSelect,
-  onToggleSelected,
-  onToggleAll,
+  canMoveUp,
+  canMoveDown,
   onDraft,
   onMove,
   onOpen
 }: {
-  items: MenuItem[];
-  activeId: string;
-  selectedIds: Set<string>;
-  allFilteredSelected: boolean;
+  item: MenuItem | null;
   canEdit: boolean;
   categories: Array<{ id: string; path: string }>;
   badgeOptions: MenuBadgeOption[];
-  onSelect: (id: string) => void;
-  onToggleSelected: (id: string, checked: boolean) => void;
-  onToggleAll: (checked: boolean) => void;
+  canMoveUp: boolean;
+  canMoveDown: boolean;
   onDraft: (id: string, patch: MenuListDraft) => void;
   onMove: (id: string, direction: -1 | 1) => void;
+  onOpen: (id: string) => void;
+}) {
+  if (!item) {
+    return (
+      <aside className="menu-selection-panel" aria-label="선택 메뉴">
+        <div className="dashboard-empty" role="status">
+          <strong>선택된 메뉴가 없습니다.</strong>
+          <p>목록에서 메뉴를 선택하면 빠른 수정 항목이 표시됩니다.</p>
+        </div>
+      </aside>
+    );
+  }
+
+  return (
+    <aside className="menu-selection-panel" aria-label="선택 메뉴">
+      <div className="menu-selection-heading">
+        <div>
+          <p className="eyebrow">선택 메뉴</p>
+          <h3>{item.name}</h3>
+        </div>
+        <span className={hasMenuDraftMarker(item) ? "status-badge locked" : "status-badge active"}>
+          {hasMenuDraftMarker(item) ? "미저장" : "저장됨"}
+        </span>
+      </div>
+
+      <div className="menu-selection-summary">
+        <div>
+          <span>카테고리</span>
+          <strong>{item.categoryPath}</strong>
+        </div>
+        <div>
+          <span>가격</span>
+          <strong>{formatPrices(item)}</strong>
+        </div>
+        <div>
+          <span>수정</span>
+          <strong>{item.updatedByUsername} · {formatDateTime(item.updatedAt)}</strong>
+        </div>
+      </div>
+
+      <div className="menu-selection-controls">
+        <label className="field">
+          <span>카테고리</span>
+          <select
+            aria-label={`${item.name} 카테고리 빠른 변경`}
+            value={item.categoryId}
+            disabled={!canEdit}
+            onChange={(event) => onDraft(item.id, { categoryId: event.target.value })}
+          >
+            {categories.map((category) => (
+              <option key={category.id} value={category.id}>
+                {category.path}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="field">
+          <span>판매 상태</span>
+          <select
+            aria-label={`${item.name} 판매 상태 빠른 변경`}
+            value={item.saleStatus}
+            disabled={!canEdit}
+            onChange={(event) => onDraft(item.id, { saleStatus: event.target.value as "available" | "sold_out" })}
+          >
+            <option value="available">판매 중</option>
+            <option value="sold_out">품절</option>
+          </select>
+        </label>
+        <label className="check-row">
+          <input
+            aria-label={`${item.name} 노출 빠른 변경`}
+            type="checkbox"
+            checked={item.isVisible}
+            disabled={!canEdit}
+            onChange={(event) => onDraft(item.id, { isVisible: event.target.checked })}
+          />
+          {item.isVisible ? "고객 메뉴판에 노출" : "고객 메뉴판에서 숨김"}
+        </label>
+        <BadgeSelectionEditor
+          label={`${item.name} 배지`}
+          selected={item.badges}
+          options={badgeOptions}
+          disabled={!canEdit}
+          onChange={(badges) => onDraft(item.id, { badges })}
+        />
+      </div>
+
+      <div className="menu-selection-actions">
+        <button className="icon-button" type="button" disabled={!canEdit || !canMoveUp} onClick={() => onMove(item.id, -1)} aria-label={`${item.name} 위로 이동`}>
+          ↑
+        </button>
+        <button
+          className="icon-button"
+          type="button"
+          disabled={!canEdit || !canMoveDown}
+          onClick={() => onMove(item.id, 1)}
+          aria-label={`${item.name} 아래로 이동`}
+        >
+          ↓
+        </button>
+        <button className="button secondary" type="button" onClick={() => onOpen(item.id)}>
+          편집 열기
+        </button>
+      </div>
+    </aside>
+  );
+}
+
+function MenuItemsDataView({
+  items,
+  selectedId,
+  onSelect,
+  onOpen
+}: {
+  items: MenuItem[];
+  selectedId: string;
+  onSelect: (id: string) => void;
   onOpen: (id: string) => void;
 }) {
   return (
     <div className="menus-data-view" aria-label="메뉴 목록">
       <table className="data-table menus-table">
+        <colgroup>
+          <col className="menus-col-order" />
+          <col className="menus-col-category" />
+          <col className="menus-col-name" />
+          <col className="menus-col-price" />
+          <col className="menus-col-badges" />
+          <col className="menus-col-status" />
+          <col className="menus-col-visibility" />
+        </colgroup>
         <thead>
           <tr>
             <th scope="col">노출순서</th>
@@ -1168,119 +1255,55 @@ function MenuItemsDataView({
             <th scope="col">배지</th>
             <th scope="col">상태</th>
             <th scope="col">노출</th>
-            <th scope="col">수정</th>
-            <th scope="col">
-              <div className="menu-actions-heading">
-                <span>작업</span>
-                <label className="control-hitbox" aria-label="화면 메뉴 전체 선택">
-                  <input
-                    aria-label="화면 메뉴 전체 선택"
-                    type="checkbox"
-                    checked={allFilteredSelected}
-                    disabled={!canEdit || items.length === 0}
-                    onChange={(event) => onToggleAll(event.target.checked)}
-                  />
-                </label>
-              </div>
-            </th>
           </tr>
         </thead>
         <tbody>
-          {items.map((item, index) => (
-            <tr key={item.id} data-selected={item.id === activeId} data-dirty={hasMenuDraftMarker(item)}>
-              <td>
-                <div className="table-actions">
+          {items.map((item) => (
+            <tr
+              key={item.id}
+              data-dirty={hasMenuDraftMarker(item)}
+              data-selected={item.id === selectedId}
+              tabIndex={0}
+              onClick={() => onSelect(item.id)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  onSelect(item.id);
+                }
+              }}
+            >
+              <td className="menu-order-cell">
+                <div className="menu-order-stack">
                   <span className="status-badge">{item.sortOrder + 1}</span>
-                  <button className="icon-button" type="button" disabled={!canEdit || index === 0} onClick={() => onMove(item.id, -1)} aria-label={`${item.name} 위로 이동`}>
-                    ↑
-                  </button>
-                  <button
-                    className="icon-button"
-                    type="button"
-                    disabled={!canEdit || index === items.length - 1}
-                    onClick={() => onMove(item.id, 1)}
-                    aria-label={`${item.name} 아래로`}
-                  >
-                    ↓
-                  </button>
                 </div>
               </td>
-              <td>
-                <select
-                  aria-label={`${item.name} 카테고리 빠른 변경`}
-                  value={item.categoryId}
-                  disabled={!canEdit}
-                  onChange={(event) => onDraft(item.id, { categoryId: event.target.value })}
-                >
-                  {categories.map((category) => (
-                    <option key={category.id} value={category.id}>
-                      {category.path}
-                    </option>
-                  ))}
-                </select>
+              <td className="menu-category-cell">
+                <span title={item.categoryPath}>
+                  <strong>{categoryLeafLabel(item.categoryPath)}</strong>
+                  {categoryParentLabel(item.categoryPath) ? <small>{categoryParentLabel(item.categoryPath)}</small> : null}
+                </span>
               </td>
-              <td>
+              <td className="menu-name-cell">
                 <strong>{item.name}</strong>
+                <span className="menu-type-label">{item.itemType ? `${item.itemType.name} · ${item.itemType.source === "system" ? "공통" : "바 전용"}` : "품목 유형 없음"}</span>
                 <small>{item.description || "설명 없음"}</small>
               </td>
-              <td>
-                {formatPrices(item)}
+              <td className="menu-price-cell">
+                <span>{formatRepresentativePrice(item)}</span>
               </td>
-              <td>
-                <BadgeSelectionEditor
-                  label={`${item.name} 배지`}
-                  selected={item.badges}
-                  options={badgeOptions}
-                  disabled={!canEdit}
-                  onChange={(badges) => onDraft(item.id, { badges })}
-                />
+              <td className="menu-badges-cell">
+                <MenuBadgeChips badges={item.badges} />
                 {item.saleStatus === "sold_out" && item.badges.length ? <small>품절 공개 JSON에서는 배지 숨김</small> : null}
               </td>
-              <td>
-                <select
-                  aria-label={`${item.name} 판매 상태 빠른 변경`}
-                  value={item.saleStatus}
-                  disabled={!canEdit}
-                  onChange={(event) => onDraft(item.id, { saleStatus: event.target.value as "available" | "sold_out" })}
-                >
-                  <option value="available">판매 중</option>
-                  <option value="sold_out">품절</option>
-                </select>
+              <td className="menu-status-cell">
+                <span className={item.saleStatus === "available" ? "status-badge active" : "status-badge locked"}>
+                  {item.saleStatus === "available" ? "판매 중" : "품절"}
+                </span>
               </td>
-              <td>
-                <label className="inline-switch">
-                  <input
-                    aria-label={`${item.name} 노출 빠른 변경`}
-                    type="checkbox"
-                    checked={item.isVisible}
-                    disabled={!canEdit}
-                    onChange={(event) => onDraft(item.id, { isVisible: event.target.checked })}
-                  />
+              <td className="menu-visibility-cell">
+                <span className={item.isVisible ? "status-badge active" : "status-badge"}>
                   {item.isVisible ? "노출" : "숨김"}
-                </label>
-              </td>
-              <td>
-                <small>{item.updatedByUsername}</small>
-                <small>{formatDateTime(item.updatedAt)}</small>
-              </td>
-              <td>
-                <div className="table-actions">
-                  <label className="control-hitbox" aria-label={`${item.name} 선택`}>
-                    <input
-                      aria-label={`${item.name} 선택`}
-                      type="checkbox"
-                      checked={selectedIds.has(item.id)}
-                      disabled={!canEdit}
-                      onChange={(event) => onToggleSelected(item.id, event.target.checked)}
-                    />
-                  </label>
-                  <button className="button compact" type="button" onClick={() => onSelect(item.id)}>
-                    선택
-                  </button>
-                  <button className="button compact secondary" type="button" onClick={() => onOpen(item.id)}>
-                    상세
-                  </button>
-                </div>
+                </span>
               </td>
             </tr>
           ))}
@@ -1288,20 +1311,14 @@ function MenuItemsDataView({
       </table>
 
       <div className="data-cards">
-        {items.map((item, index) => (
-          <article className="data-card menu-card-summary" key={item.id} data-selected={item.id === activeId} data-dirty={hasMenuDraftMarker(item)}>
-            <div>
-              <label className="check-row menu-card-check">
-                <input
-                  aria-label={`${item.name} 선택`}
-                  type="checkbox"
-                  checked={selectedIds.has(item.id)}
-                  disabled={!canEdit}
-                  onChange={(event) => onToggleSelected(item.id, event.target.checked)}
-                />
+        {items.map((item) => (
+          <article className="data-card menu-card-summary" key={item.id} data-dirty={hasMenuDraftMarker(item)} data-selected={item.id === selectedId}>
+            <div className="menu-card-header">
+              <div>
                 <strong>{item.name}</strong>
-              </label>
+              </div>
               <span>{item.categoryPath}</span>
+              <small>{item.itemType ? `${item.itemType.name} · ${item.itemType.source === "system" ? "공통" : "바 전용"}` : "품목 유형 없음"}</small>
             </div>
             <div className="card-row">
               <span>노출순서</span>
@@ -1309,66 +1326,19 @@ function MenuItemsDataView({
             </div>
             <div className="card-row">
               <span>가격</span>
-              <strong>{formatPrices(item)}</strong>
+              <strong>{formatRepresentativePrice(item)}</strong>
             </div>
-            <label className="field">
-              <span>카테고리</span>
-              <select
-                aria-label={`${item.name} 카테고리 빠른 변경`}
-                value={item.categoryId}
-                disabled={!canEdit}
-                onChange={(event) => onDraft(item.id, { categoryId: event.target.value })}
-              >
-                {categories.map((category) => (
-                  <option key={category.id} value={category.id}>
-                    {category.path}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="field">
-              <span>상태</span>
-              <select
-                aria-label={`${item.name} 판매 상태 빠른 변경`}
-                value={item.saleStatus}
-                disabled={!canEdit}
-                onChange={(event) => onDraft(item.id, { saleStatus: event.target.value as "available" | "sold_out" })}
-              >
-                <option value="available">판매 중</option>
-                <option value="sold_out">품절</option>
-              </select>
-            </label>
-            <label className="check-row">
-              <input
-                aria-label={`${item.name} 노출 빠른 변경`}
-                type="checkbox"
-                checked={item.isVisible}
-                disabled={!canEdit}
-                onChange={(event) => onDraft(item.id, { isVisible: event.target.checked })}
-              />
-              {item.isVisible ? "고객 메뉴판에 노출" : "고객 메뉴판에서 숨김"}
-            </label>
-            <BadgeSelectionEditor
-              label={`${item.name} 배지`}
-              selected={item.badges}
-              options={badgeOptions}
-              disabled={!canEdit}
-              onChange={(badges) => onDraft(item.id, { badges })}
-            />
+            <div className="pill-row" aria-label={`${item.name} 상태 요약`}>
+              <span className={item.saleStatus === "available" ? "status-badge active" : "status-badge locked"}>
+                {item.saleStatus === "available" ? "판매 중" : "품절"}
+              </span>
+              <span className={item.isVisible ? "status-badge active" : "status-badge"}>
+                {item.isVisible ? "노출" : "숨김"}
+              </span>
+            </div>
+            <MenuBadgeChips badges={item.badges} />
             {item.saleStatus === "sold_out" && item.badges.length ? <p className="muted">품절 공개 JSON에서는 배지가 숨겨집니다.</p> : null}
             <div className="card-actions">
-              <button className="icon-button" type="button" disabled={!canEdit || index === 0} onClick={() => onMove(item.id, -1)} aria-label={`${item.name} 위로 이동`}>
-                ↑
-              </button>
-              <button
-                className="icon-button"
-                type="button"
-                disabled={!canEdit || index === items.length - 1}
-                onClick={() => onMove(item.id, 1)}
-                aria-label={`${item.name} 아래로 이동`}
-              >
-                ↓
-              </button>
               <button className="button secondary" type="button" onClick={() => onSelect(item.id)}>
                 선택
               </button>
@@ -1383,127 +1353,19 @@ function MenuItemsDataView({
   );
 }
 
-function MenuBulkPanel({
-  canEdit,
-  selectedCount,
-  draftCount,
-  categories,
-  badgeOptions,
-  form,
-  message,
-  saveState,
-  saveDisabled,
-  onChange,
-  onApply,
-  onSave,
-  onRevert
-}: {
-  canEdit: boolean;
-  selectedCount: number;
-  draftCount: number;
-  categories: Array<{ id: string; path: string }>;
-  badgeOptions: MenuBadgeOption[];
-  form: BulkForm;
-  message: string;
-  saveState: BulkSaveState;
-  saveDisabled: boolean;
-  onChange: (form: BulkForm) => void;
-  onApply: () => void;
-  onSave: () => void;
-  onRevert: () => void;
-}) {
-  const bulkBadges = form.badgeMode === "replace" ? form.badges : [];
+function MenuBadgeChips({ badges }: { badges: MenuItemBadge[] }) {
+  if (!badges.length) return <span className="muted">배지 없음</span>;
   return (
-    <div className="menu-bulk-panel" data-active={selectedCount > 0 || draftCount > 0} aria-label="메뉴 일괄 수정">
-      <div className="menu-bulk-summary">
-        <strong>선택 {selectedCount}개</strong>
-        <span>미저장 변경 {draftCount}개</span>
-        <span>{canEdit ? "최종 저장 전 화면에만 적용" : "읽기 전용"}</span>
-      </div>
-      <div className="menu-bulk-grid">
-        <label className="field">
-          <span>판매 상태</span>
-          <select
-            aria-label="일괄 판매 상태"
-            value={form.saleStatus}
-            disabled={!canEdit}
-            onChange={(event) => onChange({ ...form, saleStatus: event.target.value as BulkForm["saleStatus"] })}
-          >
-            <option value="keep">유지</option>
-            <option value="available">판매 중</option>
-            <option value="sold_out">품절</option>
-          </select>
-        </label>
-        <label className="field">
-          <span>노출</span>
-          <select
-            aria-label="일괄 노출"
-            value={form.visibility}
-            disabled={!canEdit}
-            onChange={(event) => onChange({ ...form, visibility: event.target.value as BulkForm["visibility"] })}
-          >
-            <option value="keep">유지</option>
-            <option value="visible">노출</option>
-            <option value="hidden">숨김</option>
-          </select>
-        </label>
-        <label className="field">
-          <span>카테고리 이동</span>
-          <select
-            aria-label="일괄 카테고리 이동"
-            value={form.categoryId}
-            disabled={!canEdit}
-            onChange={(event) => onChange({ ...form, categoryId: event.target.value })}
-          >
-            <option value="keep">유지</option>
-            {categories.map((category) => (
-              <option key={category.id} value={category.id}>
-                {category.path}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="field">
-          <span>배지</span>
-          <select
-            aria-label="일괄 배지 방식"
-            value={form.badgeMode}
-            disabled={!canEdit}
-            onChange={(event) =>
-              onChange({
-                ...form,
-                badgeMode: event.target.value as BadgeMode,
-                badges: event.target.value === "replace" ? form.badges : []
-              })
-            }
-          >
-            <option value="keep">유지</option>
-            <option value="replace">선택 배지로 교체</option>
-            <option value="clear">모두 제거</option>
-          </select>
-        </label>
-      </div>
-      {form.badgeMode === "replace" ? (
-        <BadgeSelectionEditor
-          label="일괄 배지"
-          selected={bulkBadges}
-          options={badgeOptions}
-          disabled={!canEdit}
-          onChange={(badges) => onChange({ ...form, badges })}
-        />
-      ) : null}
-      {message ? <div className={`form-status ${saveState === "success" ? "success" : ""}`} role="alert">{message}</div> : null}
-      <div className="menu-bulk-actions">
-        <button className="button secondary" type="button" disabled={!canEdit || selectedCount === 0} onClick={onApply}>
-          선택 항목에 적용
-        </button>
-        <button className="button secondary" type="button" disabled={draftCount === 0 || saveState === "saving"} onClick={onRevert}>
-          변경 취소
-        </button>
-        <button className="button primary" type="button" disabled={saveDisabled} onClick={onSave}>
-          {saveState === "saving" ? "저장 중" : `최종 저장 ${draftCount ? `${draftCount}개` : ""}`}
-        </button>
-      </div>
+    <div className="menu-badge-inline-list">
+      {badges.map((badge) => (
+        <span
+          className="menu-badge-chip"
+          key={badgeKey(badge)}
+          style={{ backgroundColor: badge.color.backgroundHex, color: badge.color.textColor }}
+        >
+          {badge.name}
+        </span>
+      ))}
     </div>
   );
 }
@@ -1676,24 +1538,12 @@ function menuMatchesFilters(item: MenuItem, filters: MenuFilterInput): boolean {
   return matchesQuery && matchesCategory && matchesItemType && matchesSale && matchesVisibility && matchesBadge;
 }
 
-function groupItemsByCategory(items: MenuItem[]): Array<{ categoryId: string; categoryPath: string; items: MenuItem[] }> {
-  const groups = new Map<string, { categoryId: string; categoryPath: string; items: MenuItem[] }>();
+function countMenusByCategory(items: MenuItem[]): Map<string, number> {
+  const counts = new Map<string, number>();
   for (const item of items) {
-    const group = groups.get(item.categoryId) ?? { categoryId: item.categoryId, categoryPath: item.categoryPath, items: [] };
-    group.items.push(item);
-    groups.set(item.categoryId, group);
+    counts.set(item.categoryId, (counts.get(item.categoryId) ?? 0) + 1);
   }
-  return [...groups.values()];
-}
-
-function bulkFormToDraft(form: BulkForm): MenuListDraft {
-  const draft: MenuListDraft = {};
-  if (form.saleStatus !== "keep") draft.saleStatus = form.saleStatus;
-  if (form.visibility !== "keep") draft.isVisible = form.visibility === "visible";
-  if (form.categoryId !== "keep") draft.categoryId = form.categoryId;
-  if (form.badgeMode === "replace") draft.badges = form.badges;
-  if (form.badgeMode === "clear") draft.badges = [];
-  return draft;
+  return counts;
 }
 
 function toBulkChanges(drafts: Record<string, MenuListDraft>): BulkMenuItemChange[] {
@@ -1736,6 +1586,21 @@ function hasMenuDraftMarker(item: MenuItem): boolean {
 function formatPrices(item: MenuItem): string {
   if (!item.prices.length) return "가격 없음";
   return item.prices.map((price) => `${price.label} ${price.amountMinor.toLocaleString("ko-KR")}원`).join(" · ");
+}
+
+function formatRepresentativePrice(item: MenuItem): string {
+  const price = item.prices.find((entry) => entry.isRepresentative) ?? item.prices[0];
+  if (!price) return "가격 없음";
+  return `${price.label} ${price.amountMinor.toLocaleString("ko-KR")}원`;
+}
+
+function categoryLeafLabel(path: string): string {
+  return path.split(" / ").at(-1) ?? path;
+}
+
+function categoryParentLabel(path: string): string {
+  const parts = path.split(" / ");
+  return parts.length > 1 ? parts.slice(0, -1).join(" / ") : "";
 }
 
 function formatDateTime(value: string): string {

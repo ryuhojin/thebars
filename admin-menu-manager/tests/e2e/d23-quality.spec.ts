@@ -151,6 +151,7 @@ for (const viewport of viewports) {
       const selectedValue = await page.getByLabel("현재 작업 바").inputValue();
       if (route.selectedBarId) expect(selectedValue).toBe(route.selectedBarId);
       else expect(accessibleBarIds.has(selectedValue)).toBe(true);
+      expect(await page.locator(".sidebar .nav-link.is-active").count()).toBeLessThanOrEqual(1);
       await expect(page.locator("main")).not.toContainText("요청을 처리하지 못했습니다.");
       await expectNoHorizontalOverflow(page);
       await expectTouchTargets(page);
