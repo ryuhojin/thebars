@@ -860,6 +860,9 @@ function toDeployment(record: PublicationRecord): CloudflareDeployment {
 function mapPublicationError(error: unknown): AuthServiceError {
   if (error instanceof AuthServiceError) return error;
   if (error instanceof GitHubPublicationAdapterError) {
+    if (error.code === "GITHUB_CONFIG_MISSING") {
+      return new AuthServiceError(500, "GITHUB_PUBLICATION_NOT_CONFIGURED", "고객 저장소 발행 설정이 완료되지 않았습니다.");
+    }
     if (error.code === "GITHUB_FILE_SHA_CONFLICT") {
       return new AuthServiceError(409, "GITHUB_FILE_SHA_CONFLICT", "고객 저장소 파일이 변경되었습니다. 다시 발행하세요.");
     }

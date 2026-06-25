@@ -112,6 +112,10 @@ export type AdminBindings = {
   DB?: D1Database;
   SETUP_TOKEN?: string;
   ADMIN_RECOVERY_TOKEN?: string;
+  CUSTOMER_REPO_OWNER?: string;
+  CUSTOMER_REPO_NAME?: string;
+  CUSTOMER_REPO_BRANCH?: string;
+  GITHUB_FINE_GRAINED_PAT?: string;
 };
 
 export type AdminHonoEnv = {

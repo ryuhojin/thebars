@@ -29,13 +29,13 @@ export type PublicationWriteInput = {
 };
 
 export type PublicationWriteResult = {
-  adapter: "fake-github";
+  adapter: "fake-github" | "github";
   operation: PublicationCommitOperation;
   path: string;
   commitSha: string;
   fileSha: string;
   message: string;
-  skippedExternalWrite: true;
+  skippedExternalWrite: boolean;
 };
 
 export interface GitHubPublicationAdapter {
@@ -53,6 +53,15 @@ export class GitHubPublicationAdapterError extends Error {
 
 export type FakeGitHubPublicationAdapterOptions = {
   writeDelayMs?: number;
+};
+
+export type GitHubContentsPublicationAdapterConfig = {
+  owner: string;
+  repo: string;
+  branch: string;
+  token: string;
+  apiBaseUrl?: string;
+  fetcher?: typeof fetch;
 };
 
 export class FakeGitHubPublicationAdapter implements GitHubPublicationAdapter {
@@ -148,6 +157,178 @@ export class FakeGitHubPublicationAdapter implements GitHubPublicationAdapter {
       content: payload.canonicalJson,
       expectedSha: current?.sha ?? null,
       message: "Publish public menu"
+    });
+  }
+}
+
+export class MissingGitHubPublicationAdapter implements GitHubPublicationAdapter {
+  constructor(private readonly missingVariables: string[]) {}
+
+  async readFile(): Promise<PublicationFile | null> {
+    this.throwMissingConfig();
+  }
+
+  async writeFile(): Promise<PublicationWriteResult> {
+    this.throwMissingConfig();
+  }
+
+  async deleteFile(): Promise<PublicationWriteResult> {
+    this.throwMissingConfig();
+  }
+
+  async writePublicMenu(): Promise<PublicationWriteResult> {
+    this.throwMissingConfig();
+  }
+
+  private throwMissingConfig(): never {
+    throw new GitHubPublicationAdapterError(
+      "GITHUB_CONFIG_MISSING",
+      `GitHub publication is not configured: ${this.missingVariables.join(", ")}`
+    );
+  }
+}
+
+export class GitHubContentsPublicationAdapter implements GitHubPublicationAdapter {
+  private readonly apiBaseUrl: string;
+  private readonly fetcher: typeof fetch;
+
+  constructor(private readonly config: GitHubContentsPublicationAdapterConfig) {
+    this.apiBaseUrl = config.apiBaseUrl?.replace(/\/+$/, "") ?? "https://api.github.com";
+    this.fetcher = config.fetcher ?? fetch;
+  }
+
+  async readFile(path: string): Promise<PublicationFile | null> {
+    const response = await this.request(path, {
+      method: "GET",
+      query: { ref: this.config.branch }
+    });
+    if (response.status === 404) return null;
+    if (!response.ok) {
+      throw new GitHubPublicationAdapterError("GITHUB_READ_FAILED", "GitHub file read failed.");
+    }
+    const body = await response.json() as GitHubContentResponse;
+    if (body.type !== "file" || !body.sha || typeof body.content !== "string") {
+      throw new GitHubPublicationAdapterError("GITHUB_READ_INVALID", "GitHub file response was invalid.");
+    }
+    return {
+      path,
+      sha: body.sha,
+      content: decodeBase64(body.content)
+    };
+  }
+
+  async writeFile(input: PublicationWriteInput): Promise<PublicationWriteResult> {
+    const payload: GitHubWriteRequest = {
+      message: input.message,
+      content: encodeBase64(input.content),
+      branch: this.config.branch
+    };
+    if (input.expectedSha) payload.sha = input.expectedSha;
+
+    const response = await this.request(input.path, {
+      method: "PUT",
+      body: payload
+    });
+    if (response.status === 409) {
+      throw new GitHubPublicationAdapterError("GITHUB_FILE_SHA_CONFLICT", "GitHub file SHA changed.");
+    }
+    if (!response.ok) {
+      throw new GitHubPublicationAdapterError("GITHUB_WRITE_FAILED", "GitHub file write failed.");
+    }
+    const body = await response.json() as GitHubWriteResponse;
+    const commitSha = body.commit?.sha;
+    const fileSha = body.content?.sha;
+    if (!commitSha || !fileSha) {
+      throw new GitHubPublicationAdapterError("GITHUB_WRITE_INVALID", "GitHub write response was invalid.");
+    }
+    return {
+      adapter: "github",
+      operation: input.operation,
+      path: input.path,
+      commitSha,
+      fileSha,
+      message: input.message,
+      skippedExternalWrite: false
+    };
+  }
+
+  async deleteFile(input: Omit<PublicationWriteInput, "content">): Promise<PublicationWriteResult> {
+    if (!input.expectedSha) {
+      return {
+        adapter: "github",
+        operation: input.operation,
+        path: input.path,
+        commitSha: `github-noop-${smallHash(input.path + input.message)}`,
+        fileSha: "",
+        message: input.message,
+        skippedExternalWrite: true
+      };
+    }
+    const response = await this.request(input.path, {
+      method: "DELETE",
+      body: {
+        message: input.message,
+        sha: input.expectedSha,
+        branch: this.config.branch
+      }
+    });
+    if (response.status === 409) {
+      throw new GitHubPublicationAdapterError("GITHUB_FILE_SHA_CONFLICT", "GitHub file SHA changed.");
+    }
+    if (!response.ok) {
+      throw new GitHubPublicationAdapterError("GITHUB_DELETE_FAILED", "GitHub file delete failed.");
+    }
+    const body = await response.json() as GitHubDeleteResponse;
+    const commitSha = body.commit?.sha;
+    if (!commitSha) {
+      throw new GitHubPublicationAdapterError("GITHUB_DELETE_INVALID", "GitHub delete response was invalid.");
+    }
+    return {
+      adapter: "github",
+      operation: input.operation,
+      path: input.path,
+      commitSha,
+      fileSha: "",
+      message: input.message,
+      skippedExternalWrite: false
+    };
+  }
+
+  async writePublicMenu(payload: PublicationPayload): Promise<PublicationWriteResult> {
+    const path = `public/menus/${payload.encodedSlug}.json`;
+    const current = await this.readFile(path);
+    return this.writeFile({
+      operation: "menu_json",
+      path,
+      content: payload.canonicalJson,
+      expectedSha: current?.sha ?? null,
+      message: "Publish public menu"
+    });
+  }
+
+  private request(
+    path: string,
+    options: {
+      method: "GET" | "PUT" | "DELETE";
+      query?: Record<string, string>;
+      body?: unknown;
+    }
+  ): Promise<Response> {
+    const url = new URL(
+      `${this.apiBaseUrl}/repos/${encodeURIComponent(this.config.owner)}/${encodeURIComponent(this.config.repo)}/contents/${encodeGitHubPath(path)}`
+    );
+    for (const [key, value] of Object.entries(options.query ?? {})) {
+      url.searchParams.set(key, value);
+    }
+    return this.fetcher(url.toString(), {
+      method: options.method,
+      headers: {
+        accept: "application/vnd.github+json",
+        authorization: `Bearer ${this.config.token}`,
+        "content-type": "application/json",
+        "x-github-api-version": "2022-11-28"
+      },
+      body: options.body === undefined ? undefined : JSON.stringify(options.body)
     });
   }
 }
@@ -281,6 +462,16 @@ export function createFakeGitHubPublicationAdapter(options: FakeGitHubPublicatio
   return new FakeGitHubPublicationAdapter(options);
 }
 
+export function createGitHubContentsPublicationAdapter(
+  config: GitHubContentsPublicationAdapterConfig
+): GitHubContentsPublicationAdapter {
+  return new GitHubContentsPublicationAdapter(config);
+}
+
+export function createMissingGitHubPublicationAdapter(missingVariables: string[]): MissingGitHubPublicationAdapter {
+  return new MissingGitHubPublicationAdapter(missingVariables);
+}
+
 export function createFakeCloudflareDeploymentAdapter(
   options: FakeCloudflareDeploymentAdapterOptions = {}
 ): FakeCloudflareDeploymentAdapter {
@@ -311,4 +502,46 @@ function smallHash(value: string): string {
     hash = (hash * 33) ^ value.charCodeAt(index);
   }
   return (hash >>> 0).toString(16).padStart(8, "0");
+}
+
+type GitHubContentResponse = {
+  type?: string;
+  sha?: string;
+  content?: string;
+};
+
+type GitHubWriteRequest = {
+  message: string;
+  content: string;
+  branch: string;
+  sha?: string;
+};
+
+type GitHubWriteResponse = {
+  content?: { sha?: string };
+  commit?: { sha?: string };
+};
+
+type GitHubDeleteResponse = {
+  commit?: { sha?: string };
+};
+
+function encodeGitHubPath(path: string): string {
+  return path.split("/").map(encodeURIComponent).join("/");
+}
+
+function encodeBase64(value: string): string {
+  const bytes = new TextEncoder().encode(value);
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary);
+}
+
+function decodeBase64(value: string): string {
+  const binary = atob(value.replace(/\s/g, ""));
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return new TextDecoder().decode(bytes);
 }

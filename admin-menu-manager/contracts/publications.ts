@@ -129,12 +129,12 @@ export const publicationListResponseSchema = z.object({
 export const publishCurrentMenuResponseSchema = z.object({
   publication: publicationSummarySchema,
   commit: z.object({
-    adapter: z.literal("fake-github"),
+    adapter: z.enum(["fake-github", "github"]),
     operation: publicationOperationSchema,
     path: z.string().min(1),
     commitSha: z.string().min(1),
     message: z.string().min(1),
-    skippedExternalWrite: z.literal(true)
+    skippedExternalWrite: z.boolean()
   }),
   deployment: cloudflareDeploymentSchema
 });
