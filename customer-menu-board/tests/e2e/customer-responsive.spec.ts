@@ -182,7 +182,9 @@ for (const viewport of bookViewports) {
     await page.goto("/book-concept");
 
     await expect(page).toHaveURL(/\/book-concept$/);
+    await expect(page.locator(".customer-hero-copy .eyebrow")).toHaveText("THE BARS");
     await expect(page.getByRole("heading", { level: 1, name: "Sample Bar" })).toBeVisible();
+    await expect(page.getByText("선택한 카테고리의 메뉴만 조용히 읽는 디지털 메뉴북")).toBeVisible();
     await expect(page.getByRole("button", { name: "검색" })).toBeVisible();
     await expect(page.getByRole("button", { name: "매장 정보" })).toBeVisible();
     await expectBookHeaderMatchesWireframe(page, viewport.width < 768 ? 31 : 38);
@@ -226,6 +228,30 @@ for (const viewport of bookViewports) {
     });
   });
 }
+
+test("D14 customer hero keeps the default intro when bar intro is empty", async ({ page }) => {
+  await page.route("**/menus/empty-intro.json", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      status: 200,
+      body: JSON.stringify({
+        ...bookMenuFixture,
+        encodedSlug: "empty-intro",
+        bar: {
+          ...bookMenuFixture.bar,
+          intro: "   "
+        }
+      })
+    })
+  );
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/empty-intro");
+
+  await expect(page.locator(".customer-hero-copy .eyebrow")).toHaveText("THE BARS");
+  await expect(page.getByText("현재 공개된 메뉴를 확인하세요.")).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+});
 
 test("D14 customer menu not found and schema states", async ({ page }) => {
   await page.route("**/menus/missing.json", (route) => route.fulfill({ status: 404, body: "{}" }));

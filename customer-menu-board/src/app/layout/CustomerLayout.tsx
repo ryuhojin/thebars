@@ -24,6 +24,8 @@ type CustomerLayoutProps = {
   visibleMenu: PublicMenu | null;
 };
 
+const DEFAULT_CUSTOMER_HERO_INTRO = "현재 공개된 메뉴를 확인하세요.";
+
 export function CustomerLayout({
   encodedSlug,
   query,
@@ -47,10 +49,10 @@ export function CustomerLayout({
     <main className="customer-page" data-concept={concept} data-slug={encodedSlug}>
       <header className="customer-hero">
         <div className="customer-hero-copy">
-          <p className="eyebrow">{isMenuBook ? "THE BAR SELECTION" : "THE BAR MENU"}</p>
+          <p className="eyebrow">THE BARS</p>
           <h1>{menu ? menu.bar.name : "메뉴판"}</h1>
           <div className="customer-hero-subline">
-            <p>{menu ? menu.bar.intro ?? "현재 공개된 메뉴를 확인하세요." : "공개 메뉴 데이터를 불러오는 중입니다."}</p>
+            <p>{menu ? heroIntroText(menu.bar.intro) : "공개 메뉴 데이터를 불러오는 중입니다."}</p>
             {menu && isMenuBook ? (
               <HeroActions
                 encodedSlug={encodedSlug}
@@ -165,6 +167,7 @@ function HeroActions({
 
 function StoreInfoDialog({ menu, onClose }: { menu: PublicMenu; onClose: () => void }) {
   const hours = menu.bar.businessHours.map(formatBusinessHour);
+  const intro = optionalIntroText(menu.bar.intro);
 
   useEscapeClose(onClose);
 
@@ -188,7 +191,7 @@ function StoreInfoDialog({ menu, onClose }: { menu: PublicMenu; onClose: () => v
             닫기
           </button>
         </header>
-        {menu.bar.intro ? <p className="customer-dialog-lead">{menu.bar.intro}</p> : null}
+        {intro ? <p className="customer-dialog-lead">{intro}</p> : null}
         <dl className="customer-info-list">
           {menu.bar.address ? (
             <div>
@@ -230,6 +233,15 @@ function StoreInfoDialog({ menu, onClose }: { menu: PublicMenu; onClose: () => v
       </section>
     </div>
   );
+}
+
+function heroIntroText(intro: string | undefined): string {
+  return optionalIntroText(intro) ?? DEFAULT_CUSTOMER_HERO_INTRO;
+}
+
+function optionalIntroText(intro: string | undefined): string | null {
+  const normalized = intro?.trim();
+  return normalized ? normalized : null;
 }
 
 function MenuItemDetailDialog({ item, onClose }: { item: PublicMenuItem; onClose: () => void }) {

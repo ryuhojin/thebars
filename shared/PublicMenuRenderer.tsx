@@ -17,6 +17,8 @@ type MenuRenderProps = PublicMenuRendererProps & {
   sections: PublicCategorySection[];
 };
 
+const DEFAULT_PUBLIC_HERO_INTRO = "현재 공개된 메뉴를 확인하세요.";
+
 export function PublicMenuRenderer(props: PublicMenuRendererProps) {
   const sections = flattenPublicCategorySections(props.menu.categories);
   const activeItemId = props.expandedItemId ?? props.selectedItemId ?? null;
@@ -316,9 +318,9 @@ function MenuBookMenu({
 function BookMenuHero({ menu }: { menu: PublicMenu }) {
   return (
     <header className="book-preview-hero">
-      <p>THE BAR SELECTION</p>
+      <p>THE BARS</p>
       <h2>{menu.bar.name}</h2>
-      {menu.bar.intro ? <small>{menu.bar.intro}</small> : null}
+      <small>{publicHeroIntroText(menu.bar.intro)}</small>
     </header>
   );
 }
@@ -381,7 +383,7 @@ function PublicMenuHero({ menu, eyebrow }: { menu: PublicMenu; eyebrow: string }
       <div>
         <p className="eyebrow">{eyebrow}</p>
         <h2>{menu.bar.name}</h2>
-        <p>{menu.bar.intro ?? "현재 공개된 메뉴를 확인하세요."}</p>
+        <p>{publicHeroIntroText(menu.bar.intro)}</p>
       </div>
       <div className="public-menu-meta" aria-label="바 공개 정보">
         {menu.bar.address ? <span>{menu.bar.address}</span> : null}
@@ -395,6 +397,11 @@ function PublicMenuHero({ menu, eyebrow }: { menu: PublicMenu; eyebrow: string }
       </div>
     </header>
   );
+}
+
+function publicHeroIntroText(intro: string | undefined): string {
+  const normalized = intro?.trim();
+  return normalized ? normalized : DEFAULT_PUBLIC_HERO_INTRO;
 }
 
 function PreparingNotice({ menu }: { menu: PublicMenu }) {

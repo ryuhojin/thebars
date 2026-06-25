@@ -81,6 +81,8 @@ describe("customer menu single route shell", () => {
     render(<CustomerApp />);
 
     await waitFor(() => expect(screen.getByRole("heading", { level: 1, name: "Sample Bar" })).toBeInTheDocument());
+    expect(screen.getByText("THE BARS")).toBeInTheDocument();
+    expect(screen.getByText("공개 메뉴")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "매장 정보" }));
     expect(screen.getByRole("dialog", { name: "Sample Bar" })).toBeInTheDocument();
     expect(screen.getByText("02-1234-5678")).toBeInTheDocument();
@@ -94,6 +96,22 @@ describe("customer menu single route shell", () => {
     expect(screen.getByLabelText("메뉴 검색")).toHaveValue("House");
     expect(screen.getByRole("dialog", { name: "House Red" })).toBeInTheDocument();
     expect(screen.getByText("생산자")).toBeInTheDocument();
+  });
+
+  it("keeps the default hero intro when public bar intro is empty", async () => {
+    mockFetch({
+      ...menuFixture,
+      bar: {
+        ...menuFixture.bar,
+        intro: "   "
+      }
+    });
+    window.history.pushState(null, "", "/YmFyLWE3azJtOQ");
+
+    render(<CustomerApp />);
+
+    await waitFor(() => expect(screen.getByRole("heading", { level: 1, name: "Sample Bar" })).toBeInTheDocument());
+    expect(screen.getByText("현재 공개된 메뉴를 확인하세요.")).toBeInTheDocument();
   });
 
   it("resets only UI state after five idle minutes without changing the URL", async () => {
