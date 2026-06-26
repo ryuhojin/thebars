@@ -52,7 +52,7 @@ export function CustomerLayout({
           <p className="eyebrow">THE BARS</p>
           <h1>{menu ? menu.bar.name : "메뉴판"}</h1>
           <div className="customer-hero-subline">
-            <p>{menu ? heroIntroText(menu.bar.intro) : "공개 메뉴 데이터를 불러오는 중입니다."}</p>
+            {menu ? <p>{heroIntroText(menu.bar.intro)}</p> : null}
             {menu && isMenuBook ? (
               <HeroActions
                 encodedSlug={encodedSlug}
@@ -329,7 +329,7 @@ function useEscapeClose(onClose: () => void) {
 
 function StatePanel({ state }: { state: CustomerLoadState }) {
   if (state.status === "loading") {
-    return <StateBox title="불러오는 중" message="메뉴 JSON을 확인하고 있습니다." tone="info" />;
+    return null;
   }
   if (state.status === "lookup-required") {
     return <StateBox title="바를 조회해 주세요" message={state.message} tone="info" />;

@@ -286,6 +286,28 @@ test("D14 customer root asks for a bar slug without loading sample data", async 
   expect(menuRequests).toHaveLength(0);
 });
 
+test("D14 customer loading state does not show loading copy", async ({ page }) => {
+  await page.route("**/menus/slow-menu.json", async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 900));
+    await route.fulfill({
+      contentType: "application/json",
+      status: 200,
+      body: JSON.stringify({ ...bookMenuFixture, encodedSlug: "slow-menu" })
+    });
+  });
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/slow-menu", { waitUntil: "domcontentloaded" });
+  await page.waitForTimeout(350);
+
+  await expect(page.getByText("공개 메뉴 데이터를 불러오는 중입니다.")).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "불러오는 중" })).toHaveCount(0);
+  await expect(page.getByText("메뉴 JSON을 확인하고 있습니다.")).toHaveCount(0);
+  await expect(page.getByRole("heading", { level: 1, name: "메뉴판" })).toBeVisible();
+
+  await expect(page.getByRole("heading", { level: 1, name: "Sample Bar" })).toBeVisible();
+});
+
 test("D23 customer menu Web Vitals baseline and viewport fetch stability", async ({ page }) => {
   const menuRequests: string[] = [];
   page.on("request", (request) => {
