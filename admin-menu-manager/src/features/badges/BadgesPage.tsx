@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import type { BadgeColor, BadgesResponse, BarBadge, BarBadgesResponse, SystemBadge, SystemBadgeForBar } from "../../../contracts/badges";
 import { readableTextColor } from "../../../contracts/badges";
+import { LoadingSkeleton } from "../../components/feedback/LoadingSkeleton";
 import { AuthApiError } from "../auth/authApi";
 import { useDirtyWarning } from "../auth/useDirtyWarning";
 import {
@@ -839,10 +840,11 @@ function BadgeChip({ badge }: { badge: Pick<SystemBadge, "name" | "color"> }) {
 
 function BadgesStatusState({ state, navigate }: { state: LoadState<BadgesResponse>; navigate: Navigate }) {
   if (state.status === "ready") return null;
+  if (state.status === "loading") return <LoadingSkeleton ariaLabel="배지 정보 로딩 중" />;
   return (
     <section className="panel status-panel" aria-live="polite">
-      <h1>{state.status === "loading" ? "배지 정보를 불러오는 중" : "배지 정보를 표시할 수 없습니다"}</h1>
-      {state.status !== "loading" ? <p>{state.message}</p> : null}
+      <h1>배지 정보를 표시할 수 없습니다</h1>
+      <p>{state.message}</p>
       {state.status === "unauthenticated" ? (
         <button className="button primary" type="button" onClick={() => navigate("/login")}>
           로그인으로 이동
@@ -854,10 +856,11 @@ function BadgesStatusState({ state, navigate }: { state: LoadState<BadgesRespons
 
 function InlineState({ state }: { state: LoadState<BarBadgesResponse> }) {
   if (state.status === "ready") return null;
+  if (state.status === "loading") return <LoadingSkeleton variant="inline" ariaLabel="바 배지 정보 로딩 중" />;
   return (
     <div className="status-message" aria-live="polite">
-      <strong>{state.status === "loading" ? "바 배지 정보를 불러오는 중" : "바 배지 정보를 표시할 수 없습니다"}</strong>
-      {state.status !== "loading" ? <p>{state.message}</p> : null}
+      <strong>바 배지 정보를 표시할 수 없습니다</strong>
+      <p>{state.message}</p>
     </div>
   );
 }

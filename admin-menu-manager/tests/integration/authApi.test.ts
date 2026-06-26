@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createAdminApi } from "../../server/app";
 import { AuthService } from "../../server/auth/authService";
 import { MemoryAuthRepository } from "../../server/auth/memoryAuthRepository";
@@ -114,6 +114,20 @@ describe("D01 auth API", () => {
     expect(await setupAdmin(runtime)).toHaveProperty("status", 409);
   });
 
+  it("does not write a clean login failure state on successful login", async () => {
+    const runtime = createRuntime();
+    await setupAdmin(runtime);
+    const updateSpy = vi.spyOn(runtime.repository, "updateUserAuthState");
+
+    const loginResponse = await postJson(runtime.app, "/api/auth/login", {
+      username: "admin1",
+      password: "AdminPass!1"
+    });
+
+    expect(loginResponse.status).toBe(200);
+    expect(updateSpy).not.toHaveBeenCalled();
+  });
+
   it("locks an account after five failed logins and supports maintenance unlock", async () => {
     const runtime = createRuntime();
     await setupAdmin(runtime);
@@ -218,6 +232,24 @@ describe("D01 auth API", () => {
     expect(logoutResponse.status).toBe(200);
     const sessionResponse = await getJson(runtime.app, "/api/auth/session", cookie);
     expect(sessionResponse.status).toBe(401);
+  });
+
+  it("keeps logout CSRF validation when using the optimized revoke path", async () => {
+    const runtime = createRuntime();
+    await setupAdmin(runtime);
+    const loginResponse = await postJson(runtime.app, "/api/auth/login", {
+      username: "admin1",
+      password: "AdminPass!1"
+    });
+    const cookie = setCookieHeader(loginResponse);
+    const csrf = csrfFromCookie(cookie);
+
+    const invalidCsrf = await postJson(runtime.app, "/api/auth/logout", {}, cookie, "wrong-csrf");
+    expect(invalidCsrf.status).toBe(403);
+    expect(await readJsonObject(invalidCsrf)).toMatchObject({ error: { code: "CSRF_INVALID" } });
+
+    const logoutResponse = await postJson(runtime.app, "/api/auth/logout", {}, cookie, csrf);
+    expect(logoutResponse.status).toBe(200);
   });
 
   it("sets security headers and secure session cookies on HTTPS requests", async () => {

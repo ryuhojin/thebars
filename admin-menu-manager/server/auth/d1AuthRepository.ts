@@ -5,6 +5,7 @@ import type {
   CreateSessionInput,
   CreateUserInput,
   ManagedUserRecord,
+  RevokeSessionByTokenAndCsrfInput,
   SessionWithUser,
   UserStatusSummary
 } from "./repository";
@@ -107,22 +108,33 @@ export class D1AuthRepository implements AuthRepository {
       updatedAt: string;
     }
   ): Promise<void> {
-    const current = await this.findUserById(userId);
-    if (!current) return;
+    const assignments: string[] = [];
+    const values: unknown[] = [];
+    if (Object.hasOwn(updates, "loginFailedCount")) {
+      assignments.push("login_failed_count = ?");
+      values.push(updates.loginFailedCount);
+    }
+    if (Object.hasOwn(updates, "lockedUntil")) {
+      assignments.push("locked_until = ?");
+      values.push(updates.lockedUntil ?? null);
+    }
+    if (Object.hasOwn(updates, "isActive")) {
+      assignments.push("is_active = ?");
+      values.push(updates.isActive ? 1 : 0);
+    }
+    if (Object.hasOwn(updates, "forcedPasswordChange")) {
+      assignments.push("forced_password_change = ?");
+      values.push(updates.forcedPasswordChange ? 1 : 0);
+    }
+    assignments.push("updated_at = ?");
+    values.push(updates.updatedAt);
     await this.db
       .prepare(
         `UPDATE users
-         SET login_failed_count = ?, locked_until = ?, is_active = ?, forced_password_change = ?, updated_at = ?
+         SET ${assignments.join(", ")}
          WHERE id = ?`
       )
-      .bind(
-        updates.loginFailedCount ?? current.loginFailedCount,
-        Object.hasOwn(updates, "lockedUntil") ? updates.lockedUntil ?? null : current.lockedUntil,
-        updates.isActive ?? current.isActive ? 1 : 0,
-        updates.forcedPasswordChange ?? current.forcedPasswordChange ? 1 : 0,
-        updates.updatedAt,
-        userId
-      )
+      .bind(...values, userId)
       .run();
   }
 
@@ -150,9 +162,16 @@ export class D1AuthRepository implements AuthRepository {
       )
       .bind(input.id, input.userId, input.tokenHash, input.csrfTokenHash, input.now, input.now, input.expiresAt)
       .run();
-    const session = await this.db.prepare("SELECT * FROM sessions WHERE id = ?").bind(input.id).first<SessionRow>();
-    if (!session) throw new Error("SESSION_INSERT_FAILED");
-    return mapSession(session);
+    return {
+      id: input.id,
+      userId: input.userId,
+      tokenHash: input.tokenHash,
+      csrfTokenHash: input.csrfTokenHash,
+      createdAt: input.now,
+      lastTouchedAt: input.now,
+      expiresAt: input.expiresAt,
+      revokedAt: null
+    };
   }
 
   async findSessionByTokenHash(tokenHash: string): Promise<SessionWithUser | null> {
@@ -205,6 +224,27 @@ export class D1AuthRepository implements AuthRepository {
       .prepare("UPDATE sessions SET last_touched_at = ?, expires_at = ? WHERE id = ?")
       .bind(lastTouchedAt, expiresAt, sessionId)
       .run();
+  }
+
+  async revokeSessionByTokenAndCsrfHash(input: RevokeSessionByTokenAndCsrfInput): Promise<boolean> {
+    const result = await this.db
+      .prepare(
+        `UPDATE sessions
+         SET revoked_at = ?
+         WHERE token_hash = ?
+           AND csrf_token_hash = ?
+           AND revoked_at IS NULL
+           AND expires_at >= ?
+           AND EXISTS (
+             SELECT 1
+             FROM users
+             WHERE users.id = sessions.user_id
+               AND users.is_active = 1
+           )`
+      )
+      .bind(input.revokedAt, input.tokenHash, input.csrfTokenHash, input.now)
+      .run();
+    return typeof result.meta.changes === "number" && result.meta.changes > 0;
   }
 
   async revokeSession(sessionId: string, revokedAt: string): Promise<void> {

@@ -107,6 +107,7 @@ async function seedDashboardBar(runtime: DashboardRuntime, userId: string) {
     createdByUserId: userId,
     now
   });
+  await runtime.membershipRepository.ensureDefaultRolePermissions(bar.id, now);
   return bar;
 }
 
@@ -132,6 +133,50 @@ describe("D02 dashboard API", () => {
     const response = await runtime.app.request("/api/dashboard", { headers: { cookie } });
     expect(response.status).toBe(403);
     expect(await readJsonObject(response)).toMatchObject({ error: { code: "PASSWORD_CHANGE_REQUIRED" } });
+  });
+
+  it("returns admin bootstrap data and keeps forced password users blocked", async () => {
+    const runtime = createRuntime();
+    const staff = await runtime.service.createSeedUser({
+      username: "staff1",
+      password: "StaffPass!1",
+      forcedPasswordChange: false
+    });
+    const bar = await seedDashboardBar(runtime, staff.id);
+    const { response: loginResponse, cookie } = await login(runtime, "staff1", "StaffPass!1");
+    const loginBody = await readJsonObject(loginResponse);
+
+    expect(loginResponse.status).toBe(200);
+    expect(loginBody).toMatchObject({
+      data: {
+        expiresAt: "2026-06-23T08:00:00.000Z",
+        bootstrap: {
+          session: { user: { username: "staff1" } },
+          dashboard: { selectedBarId: bar.id },
+          currentPermissions: { barId: bar.id, role: "manager", permissions: { canEditMenu: true } }
+        }
+      }
+    });
+
+    const bootstrapResponse = await runtime.app.request(`/api/admin/bootstrap?barId=${bar.id}`, { headers: { cookie } });
+    expect(bootstrapResponse.status).toBe(200);
+    expect(await readJsonObject(bootstrapResponse)).toMatchObject({
+      data: {
+        session: { user: { username: "staff1" } },
+        dashboard: { selectedBarId: bar.id, accessibleBars: [{ id: bar.id, role: "manager" }] },
+        currentPermissions: { barId: bar.id, role: "manager", permissions: { canManageOrders: true } }
+      }
+    });
+
+    await runtime.service.createSeedUser({
+      username: "forced1",
+      password: "TempPass!1",
+      forcedPasswordChange: true
+    });
+    const { cookie: forcedCookie } = await login(runtime, "forced1", "TempPass!1");
+    const forcedBootstrap = await runtime.app.request("/api/admin/bootstrap", { headers: { cookie: forcedCookie } });
+    expect(forcedBootstrap.status).toBe(403);
+    expect(await readJsonObject(forcedBootstrap)).toMatchObject({ error: { code: "PASSWORD_CHANGE_REQUIRED" } });
   });
 
   it("returns system admin metrics without pre-creating bar data", async () => {

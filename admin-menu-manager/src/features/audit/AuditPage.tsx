@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { AuditListResponse, AuditLog, AuditLogQuery, AuditOperation, AuditResult, MaintenanceRunResponse } from "../../../contracts/audit";
 import type { PilotReadinessResponse, PilotReadinessStatus } from "../../../contracts/pilotReadiness";
+import { LoadingSkeleton } from "../../components/feedback/LoadingSkeleton";
 import { AuthApiError } from "../auth/authApi";
 import { readAuditLogs, readPilotReadiness, runMaintenance } from "./auditApi";
 
@@ -548,10 +549,9 @@ function auditOperationLabel(operation: AuditOperation): string {
 }
 
 function AuditStatusState({ state, navigate }: { state: Exclude<LoadState, { status: "ready" }>; navigate: Navigate }) {
+  if (state.status === "loading") return <LoadingSkeleton ariaLabel="감사 로그 로딩 중" />;
   const title =
-    state.status === "loading"
-      ? "감사 로그를 불러오는 중입니다."
-      : state.status === "forbidden"
+    state.status === "forbidden"
         ? "시스템 관리자 권한이 필요합니다."
         : state.status === "unauthenticated"
           ? "로그인이 필요합니다."
@@ -562,7 +562,7 @@ function AuditStatusState({ state, navigate }: { state: Exclude<LoadState, { sta
         <div>
           <p className="eyebrow">운영 감사</p>
           <h1 id="audit-status-title">{title}</h1>
-          <p>{state.status === "loading" ? "잠시만 기다리세요." : state.message}</p>
+          <p>{state.message}</p>
         </div>
         {state.status === "unauthenticated" ? (
           <button className="button primary" type="button" onClick={() => navigate("/login")}>

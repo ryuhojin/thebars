@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import type { CategoriesResponse, Category } from "../../../contracts/categories";
+import { LoadingSkeleton } from "../../components/feedback/LoadingSkeleton";
 import { AuthApiError } from "../auth/authApi";
 import { useDirtyWarning } from "../auth/useDirtyWarning";
 import { createCategory, deleteCategory, moveCategory, readCategories, reorderCategories, updateCategory } from "./categoriesApi";
@@ -539,10 +540,11 @@ function CategoryRow({
 
 function CategoriesStatusState({ state, navigate }: { state: LoadState<CategoriesResponse>; navigate: Navigate }) {
   if (state.status === "ready") return null;
+  if (state.status === "loading") return <LoadingSkeleton ariaLabel="카테고리 로딩 중" />;
   return (
     <section className="panel status-panel" aria-live="polite">
-      <h1>{state.status === "loading" ? "카테고리를 불러오는 중" : "카테고리를 표시할 수 없습니다"}</h1>
-      {state.status !== "loading" ? <p>{state.message}</p> : null}
+      <h1>카테고리를 표시할 수 없습니다</h1>
+      <p>{state.message}</p>
       {state.status === "unauthenticated" ? (
         <button className="button primary" type="button" onClick={() => navigate("/login")}>
           로그인으로 이동

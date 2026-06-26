@@ -6,6 +6,7 @@ import type {
   SystemUserStatusFilter
 } from "../../../contracts/systemUsers";
 import { AdaptiveDialog } from "../../components/adaptive/AdaptiveDialog";
+import { LoadingSkeleton } from "../../components/feedback/LoadingSkeleton";
 import { AuthApiError } from "../auth/authApi";
 import { useDirtyWarning } from "../auth/useDirtyWarning";
 import {
@@ -373,7 +374,7 @@ function UserDetailDialog({
 
   return (
     <AdaptiveDialog title="사용자 관리" open={state !== null} onClose={onClose}>
-      {state.status === "loading" ? <UsersStatus title="사용자 정보 로딩 중" message="상세 상태를 불러오고 있습니다." /> : null}
+      {state.status === "loading" ? <LoadingSkeleton variant="inline" ariaLabel="사용자 상세 로딩 중" /> : null}
       {state.status === "unauthenticated" || state.status === "forbidden" || state.status === "error" ? (
         <UsersStatus title="사용자 정보를 불러오지 못했습니다" message={state.message} tone="error" />
       ) : null}
@@ -490,7 +491,7 @@ function StatusBadge({ user }: { user: Pick<SystemUser, "status" | "forcedPasswo
 
 function UsersStatusState<T>({ state, navigate }: { state: LoadState<T>; navigate: Navigate }) {
   if (state.status === "loading") {
-    return <UsersStatus title="사용자 정보 로딩 중" message="계정 목록을 불러오고 있습니다." />;
+    return <LoadingSkeleton ariaLabel="사용자 정보 로딩 중" />;
   }
   if (state.status === "unauthenticated") {
     return (

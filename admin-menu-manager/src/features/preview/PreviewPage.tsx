@@ -8,6 +8,7 @@ import {
   type PublicMenuAvailableConcept,
   type PublicMenuConcept
 } from "../../../contracts/publicMenu";
+import { LoadingSkeleton } from "../../components/feedback/LoadingSkeleton";
 import { AuthApiError } from "../auth/authApi";
 import { readPublicMenuPreview } from "./previewApi";
 
@@ -60,7 +61,7 @@ export function PreviewPage({ barId, navigate }: { barId: string; navigate: Navi
     };
   }, [barId, layoutConcept]);
 
-  if (state.status === "loading") return <PreviewStatus title="미리보기 로딩 중" message="저장된 메뉴 데이터를 고객 화면 형식으로 변환하고 있습니다." />;
+  if (state.status === "loading") return <LoadingSkeleton ariaLabel="미리보기 로딩 중" />;
   if (state.status === "forbidden") return <PreviewStatus title="접근할 수 없습니다" message={state.message} tone="error" />;
   if (state.status === "not-found") return <PreviewStatus title="바를 찾을 수 없습니다" message={state.message} tone="error" />;
   if (state.status === "error") {

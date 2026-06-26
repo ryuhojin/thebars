@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import type { BarDetail, BarListResponse, BarSummary, CreateBarRequest } from "../../../contracts/bars";
 import { AdaptiveDialog } from "../../components/adaptive/AdaptiveDialog";
+import { LoadingSkeleton } from "../../components/feedback/LoadingSkeleton";
 import { AuthApiError } from "../auth/authApi";
 import { useDirtyWarning } from "../auth/useDirtyWarning";
 import { createBar, readBar, readBars, updateBarLifecycle } from "./barsApi";
@@ -597,7 +598,7 @@ function EmptyBars({ navigate }: { navigate: Navigate }) {
 
 function BarsStatusState<T>({ state, navigate }: { state: LoadState<T>; navigate: Navigate }) {
   if (state.status === "loading") {
-    return <BarsStatus title="바 정보 로딩 중" message="운영 바 데이터를 불러오고 있습니다." />;
+    return <LoadingSkeleton ariaLabel="바 정보 로딩 중" />;
   }
   if (state.status === "unauthenticated") {
     return (

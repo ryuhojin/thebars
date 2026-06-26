@@ -5,6 +5,7 @@ import type {
   CreateSessionInput,
   CreateUserInput,
   ManagedUserRecord,
+  RevokeSessionByTokenAndCsrfInput,
   SessionWithUser,
   UserStatusSummary
 } from "./repository";
@@ -110,6 +111,22 @@ export class MemoryAuthRepository implements AuthRepository {
     const session = this.sessions.get(sessionId);
     if (!session) return;
     this.sessions.set(sessionId, { ...session, lastTouchedAt, expiresAt });
+  }
+
+  async revokeSessionByTokenAndCsrfHash(input: RevokeSessionByTokenAndCsrfInput): Promise<boolean> {
+    const session =
+      [...this.sessions.values()].find(
+        (item) =>
+          item.tokenHash === input.tokenHash &&
+          item.csrfTokenHash === input.csrfTokenHash &&
+          !item.revokedAt &&
+          item.expiresAt >= input.now
+      ) ?? null;
+    if (!session) return false;
+    const user = this.users.get(session.userId);
+    if (!user?.isActive) return false;
+    this.sessions.set(session.id, { ...session, revokedAt: input.revokedAt });
+    return true;
   }
 
   async revokeSession(sessionId: string, revokedAt: string): Promise<void> {

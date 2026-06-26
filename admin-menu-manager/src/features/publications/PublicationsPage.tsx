@@ -14,6 +14,7 @@ import {
   type PublicMenuConcept
 } from "../../../contracts/publicMenu";
 import { AdaptiveDialog } from "../../components/adaptive/AdaptiveDialog";
+import { LoadingSkeleton } from "../../components/feedback/LoadingSkeleton";
 import { AuthApiError } from "../auth/authApi";
 import { publishCurrentMenu, readPublications, republishSnapshot } from "./publicationsApi";
 
@@ -527,25 +528,22 @@ function PublicationDetailContent({ publication, compact = false }: { publicatio
 }
 
 function PublicationStatusState({ state, navigate }: { state: Exclude<LoadState, { status: "ready" }>; navigate: Navigate }) {
+  if (state.status === "loading") return <LoadingSkeleton ariaLabel="발행 화면 로딩 중" />;
   const title =
-    state.status === "loading"
-      ? "발행 화면 로딩 중"
-      : state.status === "not-found"
+    state.status === "not-found"
         ? "바를 찾을 수 없습니다"
         : state.status === "forbidden" || state.status === "unauthenticated"
           ? "접근할 수 없습니다"
           : "발행 화면 오류";
-  const message = state.status === "loading" ? "저장된 메뉴판과 발행 상태를 확인하고 있습니다." : state.message;
+  const message = state.message;
   return (
-    <section className={`panel state-panel ${state.status === "loading" ? "info" : "error"}`} role={state.status === "loading" ? "status" : "alert"}>
+    <section className="panel state-panel error" role="alert">
       <p className="eyebrow">발행 관리</p>
       <h1>{title}</h1>
       <p>{message}</p>
-      {state.status !== "loading" ? (
-        <button className="button secondary" type="button" onClick={() => navigate("/dashboard")}>
-          대시보드
-        </button>
-      ) : null}
+      <button className="button secondary" type="button" onClick={() => navigate("/dashboard")}>
+        대시보드
+      </button>
     </section>
   );
 }

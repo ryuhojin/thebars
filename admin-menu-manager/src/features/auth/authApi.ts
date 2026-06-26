@@ -7,6 +7,7 @@ import type {
   SessionResponse,
   SetupRequest
 } from "../../../contracts/auth";
+import type { AdminBootstrapResponse } from "../../../contracts/adminBootstrap";
 
 export type ApiEnvelope<T> =
   | { data: T; meta: { requestId: string } }
@@ -36,6 +37,10 @@ const SESSION_CACHE_TTL_MS = 60_000;
 let sessionCache: { data: SessionResponse; checkedAt: number } | null = null;
 let sessionRequest: Promise<SessionResponse> | null = null;
 
+export type LoginResult = LoginResponse & {
+  bootstrap?: AdminBootstrapResponse | null;
+};
+
 export async function setupAdmin(payload: SetupRequest): Promise<{ setupComplete: true; user: AuthUser }> {
   return postJson("/api/setup", payload);
 }
@@ -44,10 +49,16 @@ export async function recoverAdmin(payload: RecoveryRequest): Promise<{ recovere
   return postJson("/api/recovery", payload);
 }
 
-export async function login(payload: LoginRequest): Promise<LoginResponse> {
+export async function login(payload: LoginRequest): Promise<LoginResult> {
   clearSessionCache();
-  const response = await postJson<LoginResponse>("/api/auth/login", payload);
+  const response = await postJson<LoginResult>("/api/auth/login", payload);
   sessionStorage.setItem("bar_csrf", response.csrfToken);
+  primeSessionCache({
+    authenticated: true,
+    user: response.user,
+    csrfToken: response.csrfToken,
+    expiresAt: response.expiresAt
+  });
   return response;
 }
 
@@ -96,6 +107,16 @@ export function clearSessionCache(): void {
   sessionCache = null;
   sessionRequest = null;
   if (typeof window !== "undefined") window.dispatchEvent(new Event("thebar:auth-cache-clear"));
+}
+
+export function getSessionSnapshot(): SessionResponse | null {
+  if (!sessionCache || Date.now() - sessionCache.checkedAt >= SESSION_CACHE_TTL_MS) return null;
+  return sessionCache.data;
+}
+
+export function primeSessionCache(data: SessionResponse): void {
+  sessionStorage.setItem("bar_csrf", data.csrfToken);
+  sessionCache = { data, checkedAt: Date.now() };
 }
 
 async function postJson<T>(path: string, payload: unknown, csrf = ""): Promise<T> {

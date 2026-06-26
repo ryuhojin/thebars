@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AdminApp } from "../../src/app/router/AdminApp";
+import { LoadingSkeleton } from "../../src/components/feedback/LoadingSkeleton";
 
 const viewports = [
   { width: 390, height: 844, label: "compact" },
@@ -22,6 +23,7 @@ describe("admin responsive shell", () => {
       "fetch",
       vi.fn(async (input: RequestInfo | URL) => {
         const path = typeof input === "string" ? input : input instanceof URL ? input.pathname : input.url;
+        if (path.includes("/api/admin/bootstrap")) return jsonResponse(adminBootstrapEnvelope());
         if (path.includes("/api/auth/session")) return jsonResponse(sessionEnvelope());
         if (path.includes("/api/dashboard")) return jsonResponse(dashboardEnvelope());
         if (path.includes("/api/bars/bar-1/current-permissions")) return jsonResponse(currentPermissionsEnvelope());
@@ -45,6 +47,14 @@ describe("admin responsive shell", () => {
         return jsonResponse(barListEnvelope());
       })
     );
+  });
+
+  it("renders loading fallback without visible loading copy", () => {
+    render(<LoadingSkeleton ariaLabel="화면을 불러오는 중" />);
+
+    expect(screen.getByRole("status", { name: "화면을 불러오는 중" })).toBeInTheDocument();
+    expect(screen.queryByText("화면을 불러오는 중")).not.toBeInTheDocument();
+    expect(document.querySelectorAll(".skeleton-line, .skeleton-block").length).toBeGreaterThan(0);
   });
 
   it.each(viewports)("renders the same bars URL at $label", async ({ width, height }) => {
@@ -480,15 +490,28 @@ function jsonResponse(body: unknown): Response {
 function sessionEnvelope() {
   return {
     data: {
+      authenticated: true,
       user: {
         id: "user-admin",
         username: "admin1",
-        role: "system-admin",
+        isSystemAdmin: true,
         forcedPasswordChange: false
       },
-      csrfToken: "csrf-test"
+      csrfToken: "csrf-test-token-12345678901234567890",
+      expiresAt: "2026-06-24T12:00:00.000Z"
     },
     meta: { requestId: "req-session" }
+  };
+}
+
+function adminBootstrapEnvelope() {
+  return {
+    data: {
+      session: sessionEnvelope().data,
+      dashboard: dashboardEnvelope().data,
+      currentPermissions: currentPermissionsEnvelope().data
+    },
+    meta: { requestId: "req-bootstrap" }
   };
 }
 

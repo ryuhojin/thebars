@@ -2,8 +2,8 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import type { DashboardBar, DashboardResponse } from "../../../contracts/dashboard";
 import type { CurrentBarPermissionsResponse } from "../../../contracts/memberships";
 import { logout } from "../../features/auth/authApi";
-import { readDashboard } from "../../features/dashboard/dashboardApi";
-import { readCurrentPermissions } from "../../features/memberships/membershipsApi";
+import { getDashboardSnapshot, readDashboard } from "../../features/dashboard/dashboardApi";
+import { getCurrentPermissionsSnapshot, readCurrentPermissions } from "../../features/memberships/membershipsApi";
 import type { AdminRoute } from "../router/routes";
 import { adminRoutes } from "../router/routes";
 
@@ -13,12 +13,11 @@ type AppShellProps = {
 };
 
 export function AppShell({ route, children }: AppShellProps) {
-  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
-  const [shellData, setShellData] = useState<ShellData>({ status: "loading" });
-  const [selectedBarId, setSelectedBarId] = useState<string>(() => readStoredSelectedBarId());
-  const [isLoggingOut, setIsLoggingOut] = useState(false);
-
   const currentBarId = extractBarId(window.location.pathname);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [selectedBarId, setSelectedBarId] = useState<string>(() => currentBarId || readStoredSelectedBarId());
+  const [shellData, setShellData] = useState<ShellData>(() => readInitialShellData(currentBarId));
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -347,4 +346,16 @@ function readStoredSelectedBarId(): string {
 function writeStoredSelectedBarId(barId: string): void {
   if (barId) window.localStorage.setItem("bar_ops_selected_bar_id", barId);
   else window.localStorage.removeItem("bar_ops_selected_bar_id");
+}
+
+function readInitialShellData(currentBarId: string): ShellData {
+  const dashboard = getDashboardSnapshot();
+  if (!dashboard) return { status: "loading" };
+  const storedBarId = readStoredSelectedBarId();
+  const barId = currentBarId || storedBarId || dashboard.selectedBarId || dashboard.accessibleBars[0]?.id || "";
+  return {
+    status: "ready",
+    dashboard,
+    permissions: barId ? getCurrentPermissionsSnapshot(barId) : null
+  };
 }

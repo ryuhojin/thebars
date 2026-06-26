@@ -1,5 +1,6 @@
 import { Hono, type Context } from "hono";
 import { fail, ok } from "../contracts/apiEnvelope";
+import { adminBootstrapQuerySchema, adminBootstrapResponseSchema } from "../contracts/adminBootstrap";
 import { auditLogQuerySchema, maintenanceRunRequestSchema } from "../contracts/audit";
 import {
   changePasswordRequestSchema,
@@ -66,6 +67,7 @@ import {
 } from "../contracts/itemTypes";
 import { createSystemUserRequestSchema, systemUserListQuerySchema } from "../contracts/systemUsers";
 import { createAuthRuntime, type AuthRuntimeOptions } from "./auth/runtime";
+import { toAuthUser } from "./auth/authService";
 import { AuthServiceError } from "./auth/errors";
 import {
   authErrorResponse,
@@ -207,12 +209,18 @@ export function createAdminApi(options: AdminApiOptions = {}) {
         targetLabel: data.user.username,
         metadata: { username: data.user.username }
       });
+      const bootstrap =
+        data.nextPath === "/dashboard"
+          ? await buildAdminBootstrap(context, options, data.actor, data.csrfToken, data.expiresAt, null)
+          : null;
       setSessionCookies(context, runtime, data);
       return context.json(
         ok(
           {
             user: data.user,
             csrfToken: data.csrfToken,
+            expiresAt: data.expiresAt,
+            bootstrap,
             nextPath: data.nextPath
           },
           context.get("requestId")
@@ -254,6 +262,30 @@ export function createAdminApi(options: AdminApiOptions = {}) {
       const runtime = createAuthRuntime(context.env, options);
       await runtime.service.requireFeatureSession(getSessionCookie(context, runtime), getCsrfCookie(context, runtime));
       return context.json(ok({ allowed: true }, context.get("requestId")));
+    } catch (error) {
+      return authErrorResponse(context, error);
+    }
+  });
+
+  app.get("/admin/bootstrap", async (context) => {
+    try {
+      const runtime = createAuthRuntime(context.env, options);
+      const query = parseQuery(context, adminBootstrapQuerySchema);
+      const sessionToken = getSessionCookie(context, runtime);
+      const session = await runtime.service.requireFeatureSession(
+        sessionToken,
+        getCsrfCookie(context, runtime)
+      );
+      const data = await buildAdminBootstrap(
+        context,
+        options,
+        session.user,
+        session.csrfToken,
+        session.session.expiresAt,
+        query.barId ?? null
+      );
+      if (sessionToken) renewSessionCookies(context, runtime, sessionToken, session.csrfToken, session.session.expiresAt);
+      return context.json(ok(data, context.get("requestId")));
     } catch (error) {
       return authErrorResponse(context, error);
     }
@@ -1717,6 +1749,55 @@ export function createAdminApi(options: AdminApiOptions = {}) {
   });
 
   return app;
+}
+
+async function buildAdminBootstrap(
+  context: Context<AdminHonoEnv>,
+  options: AdminApiOptions,
+  actor: AuthUserRecord,
+  csrfToken: string,
+  expiresAt: string,
+  requestedBarId: string | null
+) {
+  const runtime = createAuthRuntime(context.env, options);
+  const barRuntime = createBarRuntime(context.env, options);
+  const membershipRuntime = createMembershipRuntime(context.env, options);
+  const dashboard = await new DashboardService(
+    runtime.repository,
+    barRuntime.repository,
+    membershipRuntime.repository
+  ).readDashboard(
+    actor,
+    options.now?.()
+  );
+  const selectedBarId = selectBootstrapBarId(dashboard.accessibleBars, requestedBarId, dashboard.selectedBarId);
+  const membershipService = new MembershipService(runtime.repository, barRuntime.repository, membershipRuntime.repository, {
+    now: options.now
+  });
+  const currentPermissions = selectedBarId
+    ? await membershipService.readCurrentPermissions(actor, selectedBarId, {}).catch(() => null)
+    : null;
+
+  return adminBootstrapResponseSchema.parse({
+    session: {
+      authenticated: true,
+      user: toAuthUser(actor),
+      csrfToken,
+      expiresAt
+    },
+    dashboard,
+    currentPermissions
+  });
+}
+
+function selectBootstrapBarId(
+  accessibleBars: Array<{ id: string }>,
+  requestedBarId: string | null,
+  fallbackBarId: string | null
+): string | null {
+  if (requestedBarId && accessibleBars.some((bar) => bar.id === requestedBarId)) return requestedBarId;
+  if (fallbackBarId && accessibleBars.some((bar) => bar.id === fallbackBarId)) return fallbackBarId;
+  return accessibleBars[0]?.id ?? null;
 }
 
 function createPublicationService(env: AdminBindings | undefined, options: AdminApiOptions): PublicationService {

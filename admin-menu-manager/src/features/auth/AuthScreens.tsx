@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { LoadingSkeleton } from "../../components/feedback/LoadingSkeleton";
 import { changePassword, login, logout, readSession, recoverAdmin, setupAdmin, AuthApiError } from "./authApi";
+import { primeAdminBootstrap } from "../bootstrap/adminBootstrapApi";
 import { useDirtyWarning } from "./useDirtyWarning";
 import type { AuthUser } from "../../../contracts/auth";
 
@@ -45,7 +47,11 @@ function ChangePasswordRoute({ navigate }: { navigate: Navigate }) {
 
   if (status === "ready") return <ChangePasswordScreen navigate={navigate} />;
   if (status === "error") return <StatusPanel title="세션 확인 오류" message={message} tone="error" />;
-  return <StatusPanel title="로그인 상태 확인 중" message="비밀번호 변경 권한을 확인하고 있습니다." />;
+  return (
+    <main className="auth-status-screen" aria-live="polite">
+      <LoadingSkeleton variant="shell" ariaLabel="로그인 상태 확인 중" />
+    </main>
+  );
 }
 
 export function ProtectedDashboard({ navigate }: { navigate: Navigate }) {
@@ -165,6 +171,7 @@ function LoginScreen({ navigate }: { navigate: Navigate }) {
   const [lockedUntil, setLockedUntil] = useState("");
   const { submit, fieldErrors, message, status } = useSubmitState(async () => {
     const result = await login(form);
+    primeAdminBootstrap(result.bootstrap);
     setForm({ username: "", password: "" });
     navigate(result.nextPath);
   }, (error) => {

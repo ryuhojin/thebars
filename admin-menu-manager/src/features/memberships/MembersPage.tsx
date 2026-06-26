@@ -7,6 +7,7 @@ import type {
   RolePermission
 } from "../../../contracts/memberships";
 import { AdaptiveDialog } from "../../components/adaptive/AdaptiveDialog";
+import { LoadingSkeleton } from "../../components/feedback/LoadingSkeleton";
 import { AuthApiError } from "../auth/authApi";
 import { useDirtyWarning } from "../auth/useDirtyWarning";
 import {
@@ -494,7 +495,7 @@ function PermissionMatrix({
 
 function MembersStatusState<T>({ state, navigate }: { state: LoadState<T>; navigate: Navigate }) {
   if (state.status === "loading") {
-    return <MembersStatus title="회원 정보 로딩 중" message="바 회원과 역할 권한을 불러오고 있습니다." />;
+    return <LoadingSkeleton ariaLabel="회원 정보 로딩 중" />;
   }
   if (state.status === "unauthenticated") {
     return (

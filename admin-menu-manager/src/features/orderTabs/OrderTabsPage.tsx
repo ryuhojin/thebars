@@ -8,6 +8,7 @@ import type {
   OrderTabStatus,
   OrderTabsResponse
 } from "../../../contracts/orderTabs";
+import { LoadingSkeleton } from "../../components/feedback/LoadingSkeleton";
 import { AuthApiError } from "../auth/authApi";
 import { useDirtyWarning } from "../auth/useDirtyWarning";
 import {
@@ -1525,20 +1526,21 @@ function OrderStatusBadge({ status }: { status: OrderTabStatus }) {
 }
 
 function OrdersStatusState({ state, navigate, compact = false }: { state: LoadState<unknown>; navigate: Navigate; compact?: boolean }) {
+  if (state.status === "loading") {
+    return <LoadingSkeleton variant={compact ? "inline" : "page"} density={compact ? "compact" : "normal"} ariaLabel="테이블 로딩 중" />;
+  }
   const title =
-    state.status === "loading"
-      ? "테이블을 불러오는 중"
-      : state.status === "unauthenticated"
+    state.status === "unauthenticated"
         ? "로그인이 필요합니다"
         : state.status === "forbidden"
           ? "접근할 수 없습니다"
           : state.status === "not-found"
             ? "테이블을 찾을 수 없습니다"
             : "테이블을 불러오지 못했습니다";
-  const message = state.status === "loading" ? "잠시만 기다려 주세요." : state.status === "ready" ? "" : state.message;
-  const className = `${compact ? "dashboard-status" : "panel dashboard-status"} ${state.status === "loading" ? "info" : "error"} ${compact ? "compact-status" : ""}`;
+  const message = state.status === "ready" ? "" : state.message;
+  const className = `${compact ? "dashboard-status" : "panel dashboard-status"} error ${compact ? "compact-status" : ""}`;
   return (
-    <section className={className} role={state.status === "loading" ? "status" : "alert"}>
+    <section className={className} role="alert">
       <h1>{title}</h1>
       <p>{message}</p>
       {state.status === "unauthenticated" ? (

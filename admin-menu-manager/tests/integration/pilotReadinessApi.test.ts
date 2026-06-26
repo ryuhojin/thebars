@@ -93,7 +93,11 @@ async function postJson(app: PilotRuntime["app"], path: string, body: unknown, c
 async function login(runtime: PilotRuntime, username: string, password: string) {
   const response = await postJson(runtime.app, "/api/auth/login", { username, password });
   const cookie = setCookieHeader(response);
-  return { response, cookie, csrf: csrfFromCookie(cookie) };
+  if (!cookie.includes("bar_csrf=")) {
+    throw new Error(`csrf cookie missing after login ${response.status}: ${await response.clone().text()}`);
+  }
+  const csrf = csrfFromCookie(cookie);
+  return { response, cookie, csrf };
 }
 
 function setCookieHeader(response: Response): string {
@@ -157,7 +161,7 @@ async function seedPilotBar(
   const bar = await runtime.barRepository.createBar({
     id: input.id,
     name: input.name,
-    slug: input.id,
+    slug: toValidTestBarSlug(input.id),
     encodedSlug: input.id,
     currency: "KRW",
     settingsDraftHash: `hash-${input.id}`,
@@ -225,6 +229,11 @@ async function seedPilotBar(
     });
   }
   return bar;
+}
+
+function toValidTestBarSlug(id: string): string {
+  const suffix = id.replace(/[^a-z0-9]/g, "").slice(-6).padStart(6, "0");
+  return `bar-${suffix}`;
 }
 
 async function seedRepresentativeMenu(

@@ -37,6 +37,10 @@ export type CreatedSession = {
   expiresAt: string;
 };
 
+export type LoginResult = LoginResponse & CreatedSession & {
+  actor: AuthUserRecord;
+};
+
 export type AuthenticatedSession = {
   user: AuthUserRecord;
   session: AuthSessionRecord;
@@ -98,7 +102,7 @@ export class AuthService {
     return { recovered: true };
   }
 
-  async login(input: LoginRequest): Promise<LoginResponse & CreatedSession> {
+  async login(input: LoginRequest): Promise<LoginResult> {
     const user = await this.repository.findUserByUsername(input.username);
     if (!user) throw invalidCredentials();
 
@@ -117,18 +121,21 @@ export class AuthService {
       throw invalidCredentials();
     }
 
-    await this.repository.updateUserAuthState(user.id, {
-      loginFailedCount: 0,
-      lockedUntil: null,
-      updatedAt: nowIso(now)
-    });
+    if (user.loginFailedCount !== 0 || user.lockedUntil !== null) {
+      await this.repository.updateUserAuthState(user.id, {
+        loginFailedCount: 0,
+        lockedUntil: null,
+        updatedAt: nowIso(now)
+      });
+    }
     const createdSession = await this.createSession(user, now);
     return {
       user: toAuthUser(user),
       csrfToken: createdSession.csrfToken,
       expiresAt: createdSession.expiresAt,
       token: createdSession.token,
-      nextPath: user.forcedPasswordChange ? "/change-password" : "/dashboard"
+      nextPath: user.forcedPasswordChange ? "/change-password" : "/dashboard",
+      actor: user
     };
   }
 
@@ -175,11 +182,23 @@ export class AuthService {
 
   async logout(sessionToken: string | null, csrfToken: string | null): Promise<{ loggedOut: true }> {
     if (!sessionToken) return { loggedOut: true };
+    if (!csrfToken) throw new AuthServiceError(403, "CSRF_REQUIRED", "요청 보안 토큰이 필요합니다.");
+    const now = this.now();
+    const nowText = nowIso(now);
+    const [tokenHash, csrfTokenHash] = await Promise.all([sha256Hex(sessionToken), sha256Hex(csrfToken)]);
+    const revoked = await this.repository.revokeSessionByTokenAndCsrfHash({
+      tokenHash,
+      csrfTokenHash,
+      revokedAt: nowText,
+      now: nowText
+    });
+    if (revoked) return { loggedOut: true };
+
     const authenticated = await this.authenticateSession(sessionToken, csrfToken, {
       allowForcedPasswordChange: true,
       touch: false
     });
-    await this.repository.revokeSession(authenticated.session.id, nowIso(this.now()));
+    await this.repository.revokeSession(authenticated.session.id, nowText);
     return { loggedOut: true };
   }
 

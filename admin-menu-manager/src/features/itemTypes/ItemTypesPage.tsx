@@ -11,6 +11,7 @@ import type {
   ItemTypesResponse,
   SystemItemType
 } from "../../../contracts/itemTypes";
+import { LoadingSkeleton } from "../../components/feedback/LoadingSkeleton";
 import { AuthApiError } from "../auth/authApi";
 import { useDirtyWarning } from "../auth/useDirtyWarning";
 import {
@@ -850,7 +851,7 @@ function BarTypesSection({
           선택 바: {selectedBar?.name ?? "없음"}
         </div>
       </div>
-      {barState.status === "loading" ? <div className="dashboard-empty" role="status">바 전용 유형을 불러오는 중입니다.</div> : null}
+      {barState.status === "loading" ? <LoadingSkeleton variant="inline" ariaLabel="바 전용 유형 로딩 중" /> : null}
       {barState.status === "forbidden" || barState.status === "unauthenticated" || barState.status === "error" ? (
         <div className="form-status" role="alert">
           {barState.message}
@@ -994,7 +995,7 @@ function GrapeSection({
       <div className="grape-grid">
         <section className="sub-panel" aria-labelledby="approved-grapes-title">
           <h3 id="approved-grapes-title">승인된 품종</h3>
-          {grapeState.status === "loading" ? <div className="dashboard-empty" role="status">승인 목록을 불러오는 중입니다.</div> : null}
+          {grapeState.status === "loading" ? <LoadingSkeleton variant="inline" ariaLabel="승인 목록 로딩 중" /> : null}
           {grapeState.status === "ready" && grapeState.data.varieties.length === 0 ? (
             <div className="dashboard-empty" role="status">
               <strong>승인된 품종이 없습니다.</strong>
@@ -1074,7 +1075,7 @@ function GrapeSection({
             후보 승인 큐는 시스템 관리자만 볼 수 있습니다.
           </div>
         ) : null}
-        {candidateState.status === "loading" ? <div className="dashboard-empty" role="status">후보 큐를 불러오는 중입니다.</div> : null}
+        {candidateState.status === "loading" ? <LoadingSkeleton variant="inline" ariaLabel="후보 큐 로딩 중" /> : null}
         {candidateState.status === "ready" ? (
           <div className="item-type-workspace">
             <CandidateList
@@ -1612,10 +1613,9 @@ function TextField({
 }
 
 function ItemTypesStatusState({ state, navigate }: { state: LoadState<unknown>; navigate: Navigate }) {
+  if (state.status === "loading") return <LoadingSkeleton ariaLabel="품목 유형 로딩 중" />;
   const title =
-    state.status === "loading"
-      ? "품목 유형을 불러오는 중입니다."
-      : state.status === "unauthenticated"
+    state.status === "unauthenticated"
         ? "로그인이 필요합니다."
         : state.status === "forbidden"
           ? "접근 권한이 없습니다."

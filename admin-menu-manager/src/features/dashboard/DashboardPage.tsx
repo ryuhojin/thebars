@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import type { DashboardBar, DashboardMetric, DashboardQuickAction, DashboardResponse } from "../../../contracts/dashboard";
+import { LoadingSkeleton } from "../../components/feedback/LoadingSkeleton";
 import { AuthApiError } from "../auth/authApi";
-import { readDashboard } from "./dashboardApi";
+import { getDashboardSnapshot, readDashboard } from "./dashboardApi";
 
 type Navigate = (path: string) => void;
 
@@ -13,12 +14,17 @@ type DashboardState =
   | { status: "error"; message: string };
 
 export function DashboardPage({ navigate }: { navigate: Navigate }) {
-  const [state, setState] = useState<DashboardState>({ status: "loading" });
-  const [selectedBarId, setSelectedBarId] = useState<string>("");
+  const cachedDashboard = getDashboardSnapshot();
+  const [state, setState] = useState<DashboardState>(
+    cachedDashboard ? { status: "ready", data: cachedDashboard } : { status: "loading" }
+  );
+  const [selectedBarId, setSelectedBarId] = useState<string>(
+    () => cachedDashboard?.selectedBarId || cachedDashboard?.accessibleBars[0]?.id || ""
+  );
 
   useEffect(() => {
     let cancelled = false;
-    setState({ status: "loading" });
+    setState((current) => (current.status === "ready" ? current : { status: "loading" }));
     readDashboard()
       .then((data) => {
         if (cancelled) return;
@@ -43,7 +49,7 @@ export function DashboardPage({ navigate }: { navigate: Navigate }) {
   }, []);
 
   if (state.status === "loading") {
-    return <DashboardStatus title="대시보드 로딩 중" message="운영 요약을 불러오고 있습니다." />;
+    return <LoadingSkeleton ariaLabel="대시보드 로딩 중" />;
   }
 
   if (state.status === "unauthenticated") {

@@ -16,6 +16,7 @@ import type {
   MenuItemTypeSelection,
   UpdateMenuItemRequest
 } from "../../../contracts/menuItems";
+import { LoadingSkeleton } from "../../components/feedback/LoadingSkeleton";
 import { AuthApiError } from "../auth/authApi";
 import { useDirtyWarning } from "../auth/useDirtyWarning";
 import { bulkCreateMenuItems, bulkUpdateMenuItems, deleteMenuItem, readMenuItem, readMenuItems, updateMenuItem } from "./menuItemsApi";
@@ -2062,7 +2063,7 @@ function parseItemType(value: string): MenuItemTypeSelection | null {
 
 function MenuStatusState<T>({ state, navigate }: { state: LoadState<T>; navigate: Navigate }) {
   if (state.status === "loading") {
-    return <MenuStatus title="메뉴 정보 로딩 중" message="메뉴 데이터를 불러오고 있습니다." />;
+    return <LoadingSkeleton ariaLabel="메뉴 정보 로딩 중" />;
   }
   if (state.status === "unauthenticated") {
     return (

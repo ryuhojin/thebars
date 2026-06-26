@@ -2,8 +2,11 @@ import { Suspense, lazy, useCallback, useEffect, useMemo, useState, type ReactNo
 import { AppShell } from "../layouts/AppShell";
 import { matchAdminRoute } from "./routes";
 import { useBrowserPath } from "./useBrowserPath";
-import { AuthApiError, readSession } from "../../features/auth/authApi";
+import { AuthApiError, getSessionSnapshot } from "../../features/auth/authApi";
 import { AuthRoutePage } from "../../features/auth/AuthScreens";
+import { readAdminBootstrap } from "../../features/bootstrap/adminBootstrapApi";
+import { getDashboardSnapshot } from "../../features/dashboard/dashboardApi";
+import { LoadingSkeleton } from "../../components/feedback/LoadingSkeleton";
 
 const AuditPage = lazy(() => import("../../features/audit/AuditPage").then((module) => ({ default: module.AuditPage })));
 const BarSettingsPage = lazy(() => import("../../features/bars/BarSettingsPage").then((module) => ({ default: module.BarSettingsPage })));
@@ -130,17 +133,31 @@ function ProtectedRoute({
   navigate: (path: string) => void;
   children: ReactNode;
 }) {
-  const [state, setState] = useState<"checking" | "ready" | "error">("checking");
+  const [state, setState] = useState<"checking" | "ready" | "error">(() =>
+    hasUsableBootstrapSnapshot() ? "ready" : "checking"
+  );
   const [message, setMessage] = useState("");
+  const showChecking = useDelayedFlag(state === "checking");
 
   useEffect(() => {
     let cancelled = false;
     setState((current) => (current === "ready" ? "ready" : "checking"));
     setMessage("");
-    readSession()
-      .then((session) => {
+
+    const cachedSession = getSessionSnapshot();
+    const cachedDashboard = getDashboardSnapshot();
+    if (cachedSession && cachedDashboard) {
+      if (cachedSession.user.forcedPasswordChange) replacePath("/change-password");
+      else setState("ready");
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    readAdminBootstrap({ barId: extractBarIdFromPath(pathname) })
+      .then((bootstrap) => {
         if (cancelled) return;
-        if (session.user.forcedPasswordChange) {
+        if (bootstrap.session.user.forcedPasswordChange) {
           replacePath("/change-password");
           return;
         }
@@ -150,6 +167,10 @@ function ProtectedRoute({
         if (cancelled) return;
         if (error instanceof AuthApiError && ["AUTH_REQUIRED", "SESSION_EXPIRED"].includes(error.code)) {
           replacePath("/login");
+          return;
+        }
+        if (error instanceof AuthApiError && error.code === "PASSWORD_CHANGE_REQUIRED") {
+          replacePath("/change-password");
           return;
         }
         setMessage(error instanceof Error ? error.message : "세션을 확인하지 못했습니다.");
@@ -175,14 +196,18 @@ function ProtectedRoute({
       </main>
     );
   }
+  if (!showChecking) return null;
+
   return (
     <main className="auth-status-screen" aria-live="polite">
-      <section className="auth-card auth-status-card">
-        <p className="eyebrow">THE BAR</p>
-        <h1>로그인 상태 확인 중</h1>
-      </section>
+      <LoadingSkeleton variant="shell" ariaLabel="로그인 상태 확인 중" />
     </main>
   );
+}
+
+function hasUsableBootstrapSnapshot(): boolean {
+  const session = getSessionSnapshot();
+  return Boolean(session && !session.user.forcedPasswordChange && getDashboardSnapshot());
 }
 
 function ShellRoute({ route, children }: { route: ReturnType<typeof matchAdminRoute>; children: ReactNode }) {
@@ -194,11 +219,9 @@ function ShellRoute({ route, children }: { route: ReturnType<typeof matchAdminRo
 }
 
 function RouteLoading() {
-  return (
-    <section className="panel" role="status" aria-live="polite">
-      화면을 불러오는 중입니다.
-    </section>
-  );
+  const showLoading = useDelayedFlag(true);
+  if (!showLoading) return null;
+  return <LoadingSkeleton ariaLabel="화면을 불러오는 중" />;
 }
 
 function NotFoundPage({ navigate }: { navigate: (path: string) => void }) {
@@ -226,4 +249,25 @@ function NotFoundPage({ navigate }: { navigate: (path: string) => void }) {
 function replacePath(path: string) {
   window.history.replaceState(null, "", path);
   window.dispatchEvent(new PopStateEvent("popstate"));
+}
+
+function extractBarIdFromPath(pathname: string): string | null {
+  const match = pathname.match(/^\/bars\/([^/]+)/);
+  if (!match?.[1] || match[1] === "new") return null;
+  return decodeURIComponent(match[1]);
+}
+
+function useDelayedFlag(active: boolean, delayMs = 400): boolean {
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    if (!active) {
+      setVisible(false);
+      return undefined;
+    }
+    const timeout = window.setTimeout(() => setVisible(true), delayMs);
+    return () => window.clearTimeout(timeout);
+  }, [active, delayMs]);
+
+  return visible;
 }

@@ -60,6 +60,13 @@ export type CreateSessionInput = {
   expiresAt: string;
 };
 
+export type RevokeSessionByTokenAndCsrfInput = {
+  tokenHash: string;
+  csrfTokenHash: string;
+  revokedAt: string;
+  now: string;
+};
+
 export interface AuthRepository {
   countSystemAdmins(): Promise<number>;
   findFirstSystemAdmin(): Promise<AuthUserRecord | null>;
@@ -76,6 +83,7 @@ export interface AuthRepository {
   createSession(input: CreateSessionInput): Promise<AuthSessionRecord>;
   findSessionByTokenHash(tokenHash: string): Promise<SessionWithUser | null>;
   touchSession(sessionId: string, lastTouchedAt: string, expiresAt: string): Promise<void>;
+  revokeSessionByTokenAndCsrfHash(input: RevokeSessionByTokenAndCsrfInput): Promise<boolean>;
   revokeSession(sessionId: string, revokedAt: string): Promise<void>;
   revokeSessionsForUser(userId: string, revokedAt: string): Promise<void>;
   readUserStatusSummary(nowIso: string): Promise<UserStatusSummary>;

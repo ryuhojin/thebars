@@ -93,6 +93,17 @@ export async function readCurrentPermissions(
   return request;
 }
 
+export function getCurrentPermissionsSnapshot(
+  barId: string,
+  required?: string
+): CurrentBarPermissionsResponse | null {
+  return currentPermissionsCache.get(`${barId}:${required ?? ""}`)?.data ?? null;
+}
+
+export function primeCurrentPermissionsCache(data: CurrentBarPermissionsResponse): void {
+  currentPermissionsCache.set(`${data.barId}:${data.required ?? ""}`, { data, loadedAt: Date.now() });
+}
+
 export function clearCurrentPermissionsCache(barId?: string): void {
   currentPermissionsCacheVersion += 1;
   if (!barId) {

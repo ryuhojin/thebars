@@ -5,6 +5,7 @@ import type {
   BarSettingsResponse,
   UpdateBarSettingsRequest
 } from "../../../contracts/barSettings";
+import { LoadingSkeleton } from "../../components/feedback/LoadingSkeleton";
 import { readCurrentPermissions } from "../memberships/membershipsApi";
 import { AuthApiError } from "../auth/authApi";
 import { useDirtyWarning } from "../auth/useDirtyWarning";
@@ -449,7 +450,7 @@ function toSettingsForm(response: BarSettingsResponse): UpdateBarSettingsRequest
 
 function SettingsStatusState<T>({ state, navigate }: { state: LoadState<T>; navigate: Navigate }) {
   if (state.status === "loading") {
-    return <SettingsStatus title="바 기본 정보 로딩 중" message="공개 profile과 영업시간을 불러오고 있습니다." />;
+    return <LoadingSkeleton ariaLabel="바 기본 정보 로딩 중" />;
   }
   if (state.status === "unauthenticated") {
     return (

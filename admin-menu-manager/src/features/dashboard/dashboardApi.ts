@@ -13,7 +13,7 @@ type DashboardEnvelope =
       meta: { requestId: string };
     };
 
-const DASHBOARD_CACHE_TTL_MS = 5_000;
+const DASHBOARD_CACHE_TTL_MS = 60_000;
 
 let dashboardCache: { data: DashboardResponse; loadedAt: number } | null = null;
 let dashboardRequest: Promise<DashboardResponse> | null = null;
@@ -36,6 +36,14 @@ export async function readDashboard(): Promise<DashboardResponse> {
     });
 
   return dashboardRequest;
+}
+
+export function getDashboardSnapshot(): DashboardResponse | null {
+  return dashboardCache?.data ?? null;
+}
+
+export function primeDashboardCache(data: DashboardResponse): void {
+  dashboardCache = { data, loadedAt: Date.now() };
 }
 
 async function fetchDashboard(): Promise<DashboardResponse> {

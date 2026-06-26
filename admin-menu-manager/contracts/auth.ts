@@ -72,6 +72,7 @@ export const setupResponseSchema = z.object({
 export const loginResponseSchema = z.object({
   user: authUserSchema,
   csrfToken: z.string().min(32),
+  expiresAt: z.string().datetime(),
   nextPath: z.enum(["/dashboard", "/change-password"])
 });
 
