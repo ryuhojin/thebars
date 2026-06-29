@@ -241,6 +241,19 @@ button {
   line-height: 1.5;
 }
 
+.customer-hours-list {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.customer-hours-list li {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .customer-info-list a {
   color: inherit;
 }

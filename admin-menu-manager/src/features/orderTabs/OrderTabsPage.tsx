@@ -3,6 +3,7 @@ import type {
   OrderMenuPickerItem,
   OrderTabDetailResponse,
   OrderTabDto,
+  OrderTabEventType,
   OrderTabItemDto,
   OrderTabListQuery,
   OrderTabStatus,
@@ -129,6 +130,7 @@ export function OrderTabsPage({
   const [cancelForm, setCancelForm] = useState<CancelForm>({ reason: "" });
   const [transitioning, setTransitioning] = useState("");
   const [transitionMessage, setTransitionMessage] = useState("");
+  const [listCancellingId, setListCancellingId] = useState("");
 
   const createDirty = createFormState.tableLabel.trim().length > 0 || createFormState.guestDescription.trim().length > 0;
   const detailDirty = JSON.stringify(detailForm) !== JSON.stringify(detailOriginal);
@@ -174,7 +176,7 @@ export function OrderTabsPage({
 
   useEffect(() => {
     let cancelled = false;
-    setActiveDetailPanel("order");
+    setActiveDetailPanel(orderTabId ? takeRequestedOrderDetailPanel(barId, orderTabId) : "order");
     if (!orderTabId) {
       setDetailState(null);
       setDetailForm({ tableLabel: "", guestDescription: "" });
@@ -257,8 +259,29 @@ export function OrderTabsPage({
       .finally(() => setSaving(false));
   };
 
-  const selectTab = (tabId: string) => {
-    confirmDiscard(detailInteractionDirty, () => navigate(`/bars/${barId}/orders/${tabId}`));
+  const selectTab = (tabId: string, panel: OrderDetailPanel = "order") => {
+    confirmDiscard(detailInteractionDirty, () => {
+      requestOrderDetailPanel(barId, tabId, panel);
+      navigate(`/bars/${barId}/orders/${tabId}`);
+    });
+  };
+
+  const submitListCancel = (tab: OrderTabDto) => {
+    if (tab.status === "closed" || tab.status === "cancelled") return;
+    if (tab.activeItemCount > 0) {
+      window.alert("진행 중인 주문 항목이 있어 목록에서 바로 취소할 수 없습니다. 상세에서 주문 항목을 먼저 취소하세요.");
+      return;
+    }
+    if (!window.confirm(`${tab.displayCode} · ${tab.tableLabel} 테이블을 취소할까요?`)) return;
+    setListCancellingId(tab.id);
+    setListMessage("");
+    cancelOrderTab(barId, tab.id, { expectedVersion: tab.version, reason: "목록에서 테이블 취소" })
+      .then(() => {
+        setListMessage(`${tab.displayCode} · ${tab.tableLabel} 테이블을 취소했습니다.`);
+        setListReloadKey((value) => value + 1);
+      })
+      .catch((error: unknown) => handleLineError(error, setListMessage))
+      .finally(() => setListCancellingId(""));
   };
 
   const submitAddLine = () => {
@@ -472,18 +495,13 @@ export function OrderTabsPage({
         </div>
         <section className="hero-panel" aria-labelledby="orders-detail-hero-title">
           <div>
-            <p className="eyebrow">테이블 상세</p>
+            <p className="eyebrow">THE BAR / {detailTab.displayCode} 테이블</p>
             <h1 id="orders-detail-hero-title">{detailTab.displayCode} · {detailTab.tableLabel}</h1>
-            <p>{detailState.data.bar.name}의 선택 테이블에서 메뉴 추가, 수량 변경, 계산 요청, 정산을 처리합니다.</p>
-          </div>
-          <div className="status-box" role="status">
-            <span>현재 합계</span>
-            <strong>{formatMoney(detailTab.finalTotalAmountMinor ?? detailTab.totalAmountMinor, detailTab.currency)}</strong>
-            <small>{detailTab.activeItemCount}개 항목 · v{detailTab.version}</small>
+            <p>운영 정보를 확인하고 필요한 작업을 수행합니다.</p>
           </div>
         </section>
 
-        <section className="panel orders-detail-panel orders-detail-standalone" aria-labelledby="orders-detail-title">
+        <section className="panel orders-detail-panel orders-detail-standalone" aria-label="테이블 상세 작업">
           <DetailPanel
             state={detailState}
             addLineForm={addLineForm}
@@ -693,7 +711,14 @@ export function OrderTabsPage({
               {createButton}
             </div>
           </div>
-          <OrderTabList tabs={listState.data.tabs} selectedId="" onSelect={selectTab} />
+          <OrderTabList
+            cancellingId={listCancellingId}
+            tabs={listState.data.tabs}
+            selectedId=""
+            onCancel={submitListCancel}
+            onSelect={selectTab}
+            onSettle={(tabId) => selectTab(tabId, "settlement")}
+          />
         </section>
       </div>
     </div>
@@ -789,7 +814,21 @@ export function OrderSettlementsPage({ barId, navigate }: { barId: string; navig
   );
 }
 
-function OrderTabList({ tabs, selectedId, onSelect }: { tabs: OrderTabDto[]; selectedId: string; onSelect: (tabId: string) => void }) {
+function OrderTabList({
+  cancellingId,
+  tabs,
+  selectedId,
+  onCancel,
+  onSelect,
+  onSettle
+}: {
+  cancellingId: string;
+  tabs: OrderTabDto[];
+  selectedId: string;
+  onCancel: (tab: OrderTabDto) => void;
+  onSelect: (tabId: string) => void;
+  onSettle: (tabId: string) => void;
+}) {
   if (tabs.length === 0) {
     return (
       <div className="dashboard-empty" role="status">
@@ -821,9 +860,13 @@ function OrderTabList({ tabs, selectedId, onSelect }: { tabs: OrderTabDto[]; sel
               <td><OrderStatusBadge status={tab.status} /></td>
               <td>{formatMoney(tab.totalAmountMinor, tab.currency)}</td>
               <td>
-                <button className="button compact" type="button" onClick={() => onSelect(tab.id)}>
-                  상세
-                </button>
+                <OrderTabActions
+                  cancelling={cancellingId === tab.id}
+                  tab={tab}
+                  onCancel={onCancel}
+                  onSelect={onSelect}
+                  onSettle={onSettle}
+                />
               </td>
             </tr>
           ))}
@@ -845,12 +888,45 @@ function OrderTabList({ tabs, selectedId, onSelect }: { tabs: OrderTabDto[]; sel
               <span>합계</span>
               <strong>{formatMoney(tab.totalAmountMinor, tab.currency)}</strong>
             </div>
-            <button className="button secondary" type="button" onClick={() => onSelect(tab.id)}>
-              상세
-            </button>
+            <OrderTabActions
+              cancelling={cancellingId === tab.id}
+              tab={tab}
+              onCancel={onCancel}
+              onSelect={onSelect}
+              onSettle={onSettle}
+            />
           </article>
         ))}
       </div>
+    </div>
+  );
+}
+
+function OrderTabActions({
+  cancelling,
+  tab,
+  onCancel,
+  onSelect,
+  onSettle
+}: {
+  cancelling: boolean;
+  tab: OrderTabDto;
+  onCancel: (tab: OrderTabDto) => void;
+  onSelect: (tabId: string) => void;
+  onSettle: (tabId: string) => void;
+}) {
+  const isTerminal = tab.status === "closed" || tab.status === "cancelled";
+  return (
+    <div className="order-tab-actions">
+      <button className="button secondary compact" type="button" onClick={() => onSelect(tab.id)}>
+        상세
+      </button>
+      <button className="button danger compact" type="button" disabled={isTerminal || cancelling} onClick={() => onCancel(tab)}>
+        {cancelling ? "취소 중" : "취소"}
+      </button>
+      <button className="button primary compact" type="button" disabled={tab.status === "closed" || tab.status === "cancelled"} onClick={() => onSettle(tab.id)}>
+        정산
+      </button>
     </div>
   );
 }
@@ -987,6 +1063,8 @@ function DetailPanel({
   onSettle: () => void;
   onCancel: () => void;
 }) {
+  const [addPanelOpen, setAddPanelOpen] = useState(false);
+
   if (state === null) {
     return (
       <div className="orders-detail-empty" role="status">
@@ -1007,16 +1085,16 @@ function DetailPanel({
   const adjustmentAmount = parseAmountMinor(adjustmentForm.amountMinor);
   const customPreview = customAmount === null ? null : customAmount * customLineForm.quantity;
   const adjustmentPreview = adjustmentAmount === null ? null : state.data.tab.totalAmountMinor + adjustmentAmount;
+  const activeItems = state.data.items.filter((item) => item.status === "active");
+  const menuSubtotal = activeItems
+    .filter((item) => item.type !== "adjustment")
+    .reduce((sum, item) => sum + item.lineTotalAmountMinor, 0);
+  const adjustmentTotal = activeItems
+    .filter((item) => item.type === "adjustment")
+    .reduce((sum, item) => sum + item.lineTotalAmountMinor, 0);
+  const currentTotal = settlementAmount(state.data.tab);
   return (
     <div className="orders-form orders-detail-form">
-      <div className="section-heading">
-        <div>
-          <p className="eyebrow">상세 정보</p>
-          <h2 id="orders-detail-title">{state.data.tab.displayCode} 테이블</h2>
-        </div>
-        <OrderStatusBadge status={state.data.tab.status} />
-      </div>
-
       <div className="orders-detail-tabs" role="tablist" aria-label="테이블 상세 작업">
         <button
           id="order-detail-tab-order"
@@ -1051,18 +1129,19 @@ function DetailPanel({
         aria-labelledby="order-detail-tab-order"
         hidden={activePanel !== "order"}
       >
-      <section className="order-lines-section" aria-labelledby="order-lines-title">
-        <div className="section-heading">
+      <section className="order-work-card" aria-labelledby="order-lines-title">
+        <div className="order-work-card-header">
           <div>
-            <p className="eyebrow">주문 항목</p>
-            <h3 id="order-lines-title">주문 라인</h3>
+            <strong id="order-lines-title" className="order-work-title">{state.data.tab.displayCode} · {state.data.tab.tableLabel}</strong>
+            <p>{formatDate(state.data.tab.createdAt)} 생성{state.data.tab.guestDescription ? ` · ${state.data.tab.guestDescription}` : ""}</p>
           </div>
-          <span className="status-badge active">진행 중 {state.data.items.filter((item) => item.status === "active").length}개</span>
+          <OrderStatusBadge status={state.data.tab.status} />
         </div>
+
         {state.data.items.length === 0 ? (
           <div className="dashboard-empty" role="status">
             <strong>아직 주문 라인이 없습니다.</strong>
-            <p>아래 메뉴 선택에서 가격 항목과 수량을 선택해 추가하세요.</p>
+            <p>아래 버튼으로 메뉴 또는 기타 항목을 추가하세요.</p>
           </div>
         ) : (
           <div className="order-line-list" aria-label="주문 라인 목록">
@@ -1088,8 +1167,8 @@ function DetailPanel({
                   <button className="icon-button" type="button" aria-label={`${item.menuItemName} 수량 늘리기`} disabled={!canMutateLines || item.type === "adjustment" || item.status !== "active" || item.quantity >= 99 || lineMutatingId === item.id} onClick={() => onQuantityChange(item, item.quantity + 1)}>
                     +
                   </button>
-                  <button className="button danger compact" type="button" disabled={!canMutateLines || item.status !== "active" || lineMutatingId === item.id} onClick={() => onRequestVoid(item.id)}>
-                    취소
+                  <button className="button danger compact order-line-more-button" type="button" aria-label="취소" disabled={!canMutateLines || item.status !== "active" || lineMutatingId === item.id} onClick={() => onRequestVoid(item.id)}>
+                    <span aria-hidden="true">...</span>
                   </button>
                 </div>
                 {voidForm.itemId === item.id ? (
@@ -1118,153 +1197,80 @@ function DetailPanel({
             ))}
           </div>
         )}
-      </section>
 
-      <section className="order-menu-picker-panel" aria-labelledby="order-menu-picker-title">
-        <div className="section-heading">
-          <div>
-            <p className="eyebrow">메뉴 선택</p>
-            <h3 id="order-menu-picker-title">메뉴 추가</h3>
-          </div>
-        </div>
-        {addLineMessage ? <div className={addLineMessage.includes("다시") || addLineMessage.includes("선택") ? "form-status error" : "form-status"} role={addLineMessage.includes("다시") || addLineMessage.includes("선택") ? "alert" : "status"}>{addLineMessage}</div> : null}
-        <div className="order-picker-grid">
-          <label className="field" htmlFor="order-menu-search">
-            <span>메뉴 검색</span>
-            <input
-              id="order-menu-search"
-              aria-label="주문 메뉴 검색"
-              value={addLineForm.query}
-              onChange={(event) => onAddLineFormChange({ ...addLineForm, query: event.target.value })}
-              placeholder="메뉴명 또는 카테고리"
-            />
-          </label>
-          <label className="field" htmlFor="order-menu-select">
-            <span>메뉴</span>
-            <select
-              id="order-menu-select"
-              aria-label="추가할 메뉴"
-              value={addLineForm.menuItemId}
-              onChange={(event) => {
-                const nextMenu = state.data.menuPicker.items.find((item) => item.id === event.target.value);
-                onAddLineFormChange({ ...addLineForm, menuItemId: event.target.value, priceId: nextMenu?.prices[0]?.id ?? "" });
-              }}
-              disabled={!canMutateLines || filteredPickerItems.length === 0}
-            >
-              <option value="">메뉴 선택</option>
-              {filteredPickerItems.map((item) => (
-                <option key={item.id} value={item.id}>{item.categoryPath} · {item.name}</option>
-              ))}
-            </select>
-          </label>
-          <label className="field" htmlFor="order-price-select">
-            <span>가격 항목</span>
-            <select
-              id="order-price-select"
-              aria-label="추가할 가격 항목"
-              value={selectedPrice?.id ?? ""}
-              onChange={(event) => onAddLineFormChange({ ...addLineForm, priceId: event.target.value })}
-              disabled={!canMutateLines || !selectedMenu}
-            >
-              {selectedMenu ? selectedMenu.prices.map((price) => (
-                <option key={price.id} value={price.id}>{price.label}{price.volumeText ? ` · ${price.volumeText}` : ""} · {formatMoney(price.amountMinor, price.currency)}</option>
-              )) : <option value="">가격 선택</option>}
-            </select>
-          </label>
-          <label className="field" htmlFor="order-line-quantity">
-            <span>수량</span>
-            <input
-              id="order-line-quantity"
-              aria-label="추가할 수량"
-              type="number"
-              min="1"
-              max="99"
-              value={addLineForm.quantity}
-              onChange={(event) => onAddLineFormChange({ ...addLineForm, quantity: clampQuantity(event.target.valueAsNumber) })}
-              disabled={!canMutateLines}
-            />
-          </label>
-        </div>
-        {state.data.tab.status === "checkout_requested" ? (
-          <label className="checkbox-row">
-            <input
-              type="checkbox"
-              checked={addLineForm.confirmReopen}
-              onChange={(event) => onAddLineFormChange({ ...addLineForm, confirmReopen: event.target.checked })}
-            />
-                  <span>계산 요청 중인 테이블을 다시 열고 주문을 추가합니다.</span>
-          </label>
-        ) : null}
-        <div className="order-picker-actions">
-          <span>{selectedPrice ? `예상 추가 ${formatMoney(selectedPrice.amountMinor * addLineForm.quantity, selectedPrice.currency)}` : "메뉴와 가격을 선택하세요."}</span>
-          <button className="button primary" type="button" disabled={!canMutateLines || addingLine || !selectedMenu || !selectedPrice} onClick={onAddLine}>
-            {addingLine ? "추가 중" : "메뉴 추가"}
-          </button>
-        </div>
-      </section>
+        <button
+          className="button secondary order-add-toggle"
+          type="button"
+          aria-expanded={addPanelOpen}
+          aria-controls="order-add-panel-body"
+          onClick={() => setAddPanelOpen((open) => !open)}
+        >
+          + 메뉴 또는 기타 항목 추가
+        </button>
 
-      {(state.data.permissions.canAddCustomOrderItem || state.data.permissions.canApplyOrderAdjustment) ? (
-        <section className="order-extra-actions-panel" aria-labelledby="order-extra-actions-title">
-          <div className="section-heading">
-            <div>
-              <p className="eyebrow">직접 입력·조정</p>
-              <h3 id="order-extra-actions-title">기타 항목·금액 조정</h3>
-            </div>
-          </div>
-          {state.data.permissions.canAddCustomOrderItem ? (
-            <div className="order-adjustment-card">
-              <div className="section-heading compact-heading">
+        {addPanelOpen ? (
+          <div id="order-add-panel-body" className="order-add-panel-body">
+            <section className="order-menu-picker-panel" aria-labelledby="order-menu-picker-title">
+              <div className="section-heading">
                 <div>
-                  <p className="eyebrow">직접 입력</p>
-                  <h4>기타 주문 항목</h4>
+                  <p className="eyebrow">메뉴 선택</p>
+                  <h3 id="order-menu-picker-title">메뉴 추가</h3>
                 </div>
-                <span>{customPreview === null ? "금액 입력" : `예상 추가 ${formatMoney(customPreview, state.data.tab.currency)}`}</span>
               </div>
-              <div className="order-adjustment-grid">
-                <label className="field" htmlFor="custom-line-name">
-                  <span>항목명</span>
+              {addLineMessage ? <div className={addLineMessage.includes("다시") || addLineMessage.includes("선택") ? "form-status error" : "form-status"} role={addLineMessage.includes("다시") || addLineMessage.includes("선택") ? "alert" : "status"}>{addLineMessage}</div> : null}
+              <div className="order-picker-grid">
+                <label className="field" htmlFor="order-menu-search">
+                  <span>메뉴 검색</span>
                   <input
-                    id="custom-line-name"
-                    aria-label="기타 항목명"
-                    value={customLineForm.name}
-                    onChange={(event) => onCustomLineFormChange({ ...customLineForm, name: event.target.value })}
-                    placeholder="예: 커버차지"
-                    disabled={!canMutateLines}
+                    id="order-menu-search"
+                    aria-label="주문 메뉴 검색"
+                    value={addLineForm.query}
+                    onChange={(event) => onAddLineFormChange({ ...addLineForm, query: event.target.value })}
+                    placeholder="메뉴명 또는 카테고리"
                   />
                 </label>
-                <label className="field" htmlFor="custom-line-amount">
-                  <span>단가</span>
-                  <input
-                    id="custom-line-amount"
-                    aria-label="기타 항목 단가"
-                    inputMode="numeric"
-                    value={customLineForm.unitAmountMinor}
-                    onChange={(event) => onCustomLineFormChange({ ...customLineForm, unitAmountMinor: event.target.value })}
-                    placeholder="예: 5000"
-                    disabled={!canMutateLines}
-                  />
+                <label className="field" htmlFor="order-menu-select">
+                  <span>메뉴</span>
+                  <select
+                    id="order-menu-select"
+                    aria-label="추가할 메뉴"
+                    value={addLineForm.menuItemId}
+                    onChange={(event) => {
+                      const nextMenu = state.data.menuPicker.items.find((item) => item.id === event.target.value);
+                      onAddLineFormChange({ ...addLineForm, menuItemId: event.target.value, priceId: nextMenu?.prices[0]?.id ?? "" });
+                    }}
+                    disabled={!canMutateLines || filteredPickerItems.length === 0}
+                  >
+                    <option value="">메뉴 선택</option>
+                    {filteredPickerItems.map((item) => (
+                      <option key={item.id} value={item.id}>{item.categoryPath} · {item.name}</option>
+                    ))}
+                  </select>
                 </label>
-                <label className="field" htmlFor="custom-line-quantity">
+                <label className="field" htmlFor="order-price-select">
+                  <span>가격 항목</span>
+                  <select
+                    id="order-price-select"
+                    aria-label="추가할 가격 항목"
+                    value={selectedPrice?.id ?? ""}
+                    onChange={(event) => onAddLineFormChange({ ...addLineForm, priceId: event.target.value })}
+                    disabled={!canMutateLines || !selectedMenu}
+                  >
+                    {selectedMenu ? selectedMenu.prices.map((price) => (
+                      <option key={price.id} value={price.id}>{price.label}{price.volumeText ? ` · ${price.volumeText}` : ""} · {formatMoney(price.amountMinor, price.currency)}</option>
+                    )) : <option value="">가격 선택</option>}
+                  </select>
+                </label>
+                <label className="field" htmlFor="order-line-quantity">
                   <span>수량</span>
                   <input
-                    id="custom-line-quantity"
-                    aria-label="기타 항목 수량"
+                    id="order-line-quantity"
+                    aria-label="추가할 수량"
                     type="number"
                     min="1"
                     max="99"
-                    value={customLineForm.quantity}
-                    onChange={(event) => onCustomLineFormChange({ ...customLineForm, quantity: clampQuantity(event.target.valueAsNumber) })}
-                    disabled={!canMutateLines}
-                  />
-                </label>
-                <label className="field" htmlFor="custom-line-reason">
-                  <span>사유</span>
-                  <input
-                    id="custom-line-reason"
-                    aria-label="기타 항목 사유"
-                    value={customLineForm.reason}
-                    onChange={(event) => onCustomLineFormChange({ ...customLineForm, reason: event.target.value })}
-                    placeholder="예: 라이브 커버"
+                    value={addLineForm.quantity}
+                    onChange={(event) => onAddLineFormChange({ ...addLineForm, quantity: clampQuantity(event.target.valueAsNumber) })}
                     disabled={!canMutateLines}
                   />
                 </label>
@@ -1273,103 +1279,199 @@ function DetailPanel({
                 <label className="checkbox-row">
                   <input
                     type="checkbox"
-                    checked={customLineForm.confirmReopen}
-                    onChange={(event) => onCustomLineFormChange({ ...customLineForm, confirmReopen: event.target.checked })}
+                    checked={addLineForm.confirmReopen}
+                    onChange={(event) => onAddLineFormChange({ ...addLineForm, confirmReopen: event.target.checked })}
                   />
-                  <span>계산 요청 중인 테이블을 다시 열고 기타 항목을 추가합니다.</span>
+                  <span>계산 요청 중인 테이블을 다시 열고 주문을 추가합니다.</span>
                 </label>
               ) : null}
               <div className="order-picker-actions">
-                <span>사유와 금액은 주문 라인에 함께 보관됩니다.</span>
-                <button
-                  className="button secondary"
-                  type="button"
-                  disabled={!canMutateLines || addingCustomLine || !customLineForm.name.trim() || customAmount === null || !customLineForm.reason.trim()}
-                  onClick={onAddCustomLine}
-                >
-                  {addingCustomLine ? "추가 중" : "기타 항목 추가"}
+                <span>{selectedPrice ? `예상 추가 ${formatMoney(selectedPrice.amountMinor * addLineForm.quantity, selectedPrice.currency)}` : "메뉴와 가격을 선택하세요."}</span>
+                <button className="button primary" type="button" disabled={!canMutateLines || addingLine || !selectedMenu || !selectedPrice} onClick={onAddLine}>
+                  {addingLine ? "추가 중" : "메뉴 추가"}
                 </button>
               </div>
-            </div>
-          ) : null}
+            </section>
 
-          {state.data.permissions.canApplyOrderAdjustment ? (
-            <div className="order-adjustment-card">
-              <div className="section-heading compact-heading">
-                <div>
-                  <p className="eyebrow">할인·조정</p>
-                  <h4>할인·추가금</h4>
+            {(state.data.permissions.canAddCustomOrderItem || state.data.permissions.canApplyOrderAdjustment) ? (
+              <section className="order-extra-actions-panel" aria-labelledby="order-extra-actions-title">
+                <div className="section-heading">
+                  <div>
+                    <p className="eyebrow">직접 입력·조정</p>
+                    <h3 id="order-extra-actions-title">기타 항목·금액 조정</h3>
+                  </div>
                 </div>
-                <span>
-                  {adjustmentPreview === null
-                    ? "금액 입력"
-                    : `예상 최종 ${formatMoney(adjustmentPreview, state.data.tab.currency)}`}
-                </span>
-              </div>
-              <div className="order-adjustment-grid">
-                <label className="field" htmlFor="adjustment-label">
-                  <span>구분</span>
-                  <select
-                    id="adjustment-label"
-                    aria-label="금액 조정 구분"
-                    value={adjustmentForm.label}
-                    onChange={(event) => onAdjustmentFormChange({ ...adjustmentForm, label: event.target.value })}
-                    disabled={!canMutateLines}
-                  >
-                    <option value="할인">할인</option>
-                    <option value="추가금">추가금</option>
-                    <option value="서비스 조정">서비스 조정</option>
-                  </select>
-                </label>
-                <label className="field" htmlFor="adjustment-amount">
-                  <span>조정 금액</span>
-                  <input
-                    id="adjustment-amount"
-                    aria-label="조정 금액"
-                    inputMode="numeric"
-                    value={adjustmentForm.amountMinor}
-                    onChange={(event) => onAdjustmentFormChange({ ...adjustmentForm, amountMinor: event.target.value })}
-                    placeholder="할인은 -5000"
-                    disabled={!canMutateLines}
-                  />
-                </label>
-                <label className="field full" htmlFor="adjustment-reason">
-                  <span>사유</span>
-                  <input
-                    id="adjustment-reason"
-                    aria-label="금액 조정 사유"
-                    value={adjustmentForm.reason}
-                    onChange={(event) => onAdjustmentFormChange({ ...adjustmentForm, reason: event.target.value })}
-                    placeholder="예: 단골 할인"
-                    disabled={!canMutateLines}
-                  />
-                </label>
-              </div>
-              {state.data.tab.status === "checkout_requested" ? (
-                <label className="checkbox-row">
-                  <input
-                    type="checkbox"
-                    checked={adjustmentForm.confirmReopen}
-                    onChange={(event) => onAdjustmentFormChange({ ...adjustmentForm, confirmReopen: event.target.checked })}
-                  />
-                  <span>계산 요청 중인 테이블을 다시 열고 금액 조정을 추가합니다.</span>
-                </label>
-              ) : null}
-              <div className="order-picker-actions">
-                <span>음수는 할인, 양수는 추가금으로 합계에 반영됩니다.</span>
-                <button
-                  className="button secondary"
-                  type="button"
-                  disabled={!canMutateLines || addingAdjustment || adjustmentAmount === null || adjustmentAmount === 0 || !adjustmentForm.reason.trim()}
-                  onClick={onAddAdjustment}
-                >
-                  {addingAdjustment ? "적용 중" : "조정 추가"}
-                </button>
-              </div>
-            </div>
-          ) : null}
-        </section>
-      ) : null}
+                {state.data.permissions.canAddCustomOrderItem ? (
+                  <div className="order-adjustment-card">
+                    <div className="section-heading compact-heading">
+                      <div>
+                        <p className="eyebrow">직접 입력</p>
+                        <h4>기타 주문 항목</h4>
+                      </div>
+                      <span>{customPreview === null ? "금액 입력" : `예상 추가 ${formatMoney(customPreview, state.data.tab.currency)}`}</span>
+                    </div>
+                    <div className="order-adjustment-grid">
+                      <label className="field" htmlFor="custom-line-name">
+                        <span>항목명</span>
+                        <input
+                          id="custom-line-name"
+                          aria-label="기타 항목명"
+                          value={customLineForm.name}
+                          onChange={(event) => onCustomLineFormChange({ ...customLineForm, name: event.target.value })}
+                          placeholder="예: 커버차지"
+                          disabled={!canMutateLines}
+                        />
+                      </label>
+                      <label className="field" htmlFor="custom-line-amount">
+                        <span>단가</span>
+                        <input
+                          id="custom-line-amount"
+                          aria-label="기타 항목 단가"
+                          inputMode="numeric"
+                          value={customLineForm.unitAmountMinor}
+                          onChange={(event) => onCustomLineFormChange({ ...customLineForm, unitAmountMinor: event.target.value })}
+                          placeholder="예: 5000"
+                          disabled={!canMutateLines}
+                        />
+                      </label>
+                      <label className="field" htmlFor="custom-line-quantity">
+                        <span>수량</span>
+                        <input
+                          id="custom-line-quantity"
+                          aria-label="기타 항목 수량"
+                          type="number"
+                          min="1"
+                          max="99"
+                          value={customLineForm.quantity}
+                          onChange={(event) => onCustomLineFormChange({ ...customLineForm, quantity: clampQuantity(event.target.valueAsNumber) })}
+                          disabled={!canMutateLines}
+                        />
+                      </label>
+                      <label className="field" htmlFor="custom-line-reason">
+                        <span>사유</span>
+                        <input
+                          id="custom-line-reason"
+                          aria-label="기타 항목 사유"
+                          value={customLineForm.reason}
+                          onChange={(event) => onCustomLineFormChange({ ...customLineForm, reason: event.target.value })}
+                          placeholder="예: 라이브 커버"
+                          disabled={!canMutateLines}
+                        />
+                      </label>
+                    </div>
+                    {state.data.tab.status === "checkout_requested" ? (
+                      <label className="checkbox-row">
+                        <input
+                          type="checkbox"
+                          checked={customLineForm.confirmReopen}
+                          onChange={(event) => onCustomLineFormChange({ ...customLineForm, confirmReopen: event.target.checked })}
+                        />
+                        <span>계산 요청 중인 테이블을 다시 열고 기타 항목을 추가합니다.</span>
+                      </label>
+                    ) : null}
+                    <div className="order-picker-actions">
+                      <span>사유와 금액은 주문 라인에 함께 보관됩니다.</span>
+                      <button
+                        className="button secondary"
+                        type="button"
+                        disabled={!canMutateLines || addingCustomLine || !customLineForm.name.trim() || customAmount === null || !customLineForm.reason.trim()}
+                        onClick={onAddCustomLine}
+                      >
+                        {addingCustomLine ? "추가 중" : "기타 항목 추가"}
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+
+                {state.data.permissions.canApplyOrderAdjustment ? (
+                  <div className="order-adjustment-card">
+                    <div className="section-heading compact-heading">
+                      <div>
+                        <p className="eyebrow">할인·조정</p>
+                        <h4>할인·추가금</h4>
+                      </div>
+                      <span>
+                        {adjustmentPreview === null
+                          ? "금액 입력"
+                          : `예상 최종 ${formatMoney(adjustmentPreview, state.data.tab.currency)}`}
+                      </span>
+                    </div>
+                    <div className="order-adjustment-grid">
+                      <label className="field" htmlFor="adjustment-label">
+                        <span>구분</span>
+                        <select
+                          id="adjustment-label"
+                          aria-label="금액 조정 구분"
+                          value={adjustmentForm.label}
+                          onChange={(event) => onAdjustmentFormChange({ ...adjustmentForm, label: event.target.value })}
+                          disabled={!canMutateLines}
+                        >
+                          <option value="할인">할인</option>
+                          <option value="추가금">추가금</option>
+                          <option value="서비스 조정">서비스 조정</option>
+                        </select>
+                      </label>
+                      <label className="field" htmlFor="adjustment-amount">
+                        <span>조정 금액</span>
+                        <input
+                          id="adjustment-amount"
+                          aria-label="조정 금액"
+                          inputMode="numeric"
+                          value={adjustmentForm.amountMinor}
+                          onChange={(event) => onAdjustmentFormChange({ ...adjustmentForm, amountMinor: event.target.value })}
+                          placeholder="할인은 -5000"
+                          disabled={!canMutateLines}
+                        />
+                      </label>
+                      <label className="field full" htmlFor="adjustment-reason">
+                        <span>사유</span>
+                        <input
+                          id="adjustment-reason"
+                          aria-label="금액 조정 사유"
+                          value={adjustmentForm.reason}
+                          onChange={(event) => onAdjustmentFormChange({ ...adjustmentForm, reason: event.target.value })}
+                          placeholder="예: 단골 할인"
+                          disabled={!canMutateLines}
+                        />
+                      </label>
+                    </div>
+                    {state.data.tab.status === "checkout_requested" ? (
+                      <label className="checkbox-row">
+                        <input
+                          type="checkbox"
+                          checked={adjustmentForm.confirmReopen}
+                          onChange={(event) => onAdjustmentFormChange({ ...adjustmentForm, confirmReopen: event.target.checked })}
+                        />
+                        <span>계산 요청 중인 테이블을 다시 열고 금액 조정을 추가합니다.</span>
+                      </label>
+                    ) : null}
+                    <div className="order-picker-actions">
+                      <span>음수는 할인, 양수는 추가금으로 합계에 반영됩니다.</span>
+                      <button
+                        className="button secondary"
+                        type="button"
+                        disabled={!canMutateLines || addingAdjustment || adjustmentAmount === null || adjustmentAmount === 0 || !adjustmentForm.reason.trim()}
+                        onClick={onAddAdjustment}
+                      >
+                        {addingAdjustment ? "적용 중" : "조정 추가"}
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+              </section>
+            ) : null}
+          </div>
+        ) : null}
+      </section>
+
+      <OrderTotalSummaryPanel
+        activeItemCount={activeItems.length}
+        adjustmentTotal={adjustmentTotal}
+        currentTotal={currentTotal}
+        currency={state.data.tab.currency}
+        menuSubtotal={menuSubtotal}
+        status={state.data.tab.status}
+      />
       </div>
 
       <div
@@ -1505,7 +1607,7 @@ function DetailPanel({
             <div key={event.id}>
               <span>{formatDate(event.createdAt)}</span>
               <strong>{event.note}</strong>
-              <small>v{event.resultingVersion}</small>
+              <small>{orderEventTypeLabel(event.type)}</small>
             </div>
           ))}
         </div>
@@ -1514,15 +1616,86 @@ function DetailPanel({
   );
 }
 
+function OrderTotalSummaryPanel({
+  activeItemCount,
+  adjustmentTotal,
+  currentTotal,
+  currency,
+  menuSubtotal,
+  status
+}: {
+  activeItemCount: number;
+  adjustmentTotal: number;
+  currentTotal: number;
+  currency: string;
+  menuSubtotal: number;
+  status: OrderTabStatus;
+}) {
+  return (
+    <aside className="order-total-summary-panel" aria-label="정산 요약">
+      <div className="section-heading compact-heading">
+        <div>
+          <p className="eyebrow">현재 합계</p>
+          <h3>정산 요약</h3>
+        </div>
+        <OrderStatusBadge status={status} />
+      </div>
+      <div className="settlement-result-grid">
+        <div>
+          <span>메뉴 합계</span>
+          <strong>{formatMoney(menuSubtotal, currency)}</strong>
+        </div>
+        <div>
+          <span>할인·조정</span>
+          <strong>{formatMoney(adjustmentTotal, currency)}</strong>
+        </div>
+      </div>
+      <div className="settlement-final-total">
+        <span>현재 합계</span>
+        <strong>{formatMoney(currentTotal, currency)}</strong>
+        <small>{activeItemCount}개 진행 중</small>
+      </div>
+      <p className="settlement-guidance">계산 요청과 계좌이체 확인은 결제·정산 탭에서 처리합니다.</p>
+    </aside>
+  );
+}
+
+function orderStatusLabel(status: OrderTabStatus): string {
+  if (status === "open") return "열림";
+  if (status === "checkout_requested") return "계산 요청";
+  if (status === "closed") return "정산 완료";
+  return "취소";
+}
+
+function orderEventTypeLabel(type: OrderTabEventType): string {
+  const labels: Record<OrderTabEventType, string> = {
+    tab_created: "테이블 생성",
+    tab_updated: "테이블 수정",
+    menu_item_added: "메뉴 추가",
+    custom_item_added: "기타 항목 추가",
+    adjustment_added: "금액 조정",
+    item_quantity_updated: "수량 변경",
+    item_voided: "항목 취소",
+    checkout_requested: "계산 요청",
+    tab_reopened: "주문 재개",
+    tab_settled: "정산 완료",
+    tab_cancelled: "테이블 취소"
+  };
+  return labels[type];
+}
+
 function OrderStatusBadge({ status }: { status: OrderTabStatus }) {
-  const label = status === "open" ? "열림" : status === "checkout_requested" ? "계산 요청" : status === "closed" ? "정산 완료" : "취소";
   const className =
     status === "open"
-      ? "status-badge active"
+      ? "status-badge order-status-badge active"
       : status === "checkout_requested"
-        ? "status-badge locked"
-        : "status-badge inactive";
-  return <span className={className}>{label}</span>;
+        ? "status-badge order-status-badge locked"
+        : "status-badge order-status-badge inactive";
+  return (
+    <span className={className}>
+      <span className="order-status-badge-label">{orderStatusLabel(status)}</span>
+    </span>
+  );
 }
 
 function OrdersStatusState({ state, navigate, compact = false }: { state: LoadState<unknown>; navigate: Navigate; compact?: boolean }) {
@@ -1572,7 +1745,7 @@ function handleDetailError(error: unknown, setErrors: (errors: FieldErrors) => v
   if (error instanceof AuthApiError) {
     setErrors(error.fieldErrors);
     if (error.code === "ORDER_TAB_VERSION_CONFLICT") {
-      const latest = typeof error.details.latestVersion === "number" ? ` 최신 version ${error.details.latestVersion}.` : "";
+      const latest = typeof error.details.latestVersion === "number" ? " 최신 변경이 있습니다." : "";
       setMessage(`${error.message}${latest}`);
       return;
     }
@@ -1585,7 +1758,7 @@ function handleDetailError(error: unknown, setErrors: (errors: FieldErrors) => v
 function handleLineError(error: unknown, setMessage: (message: string) => void) {
   if (error instanceof AuthApiError) {
     if (error.code === "ORDER_TAB_VERSION_CONFLICT" || error.code === "ORDER_ITEM_VERSION_CONFLICT") {
-      const latest = typeof error.details.latestVersion === "number" ? ` 최신 version ${error.details.latestVersion}.` : "";
+      const latest = typeof error.details.latestVersion === "number" ? " 최신 변경이 있습니다." : "";
       setMessage(`${error.message}${latest}`);
       return;
     }
@@ -1643,6 +1816,25 @@ function createIdempotencyKey(): string {
 
 function orderTabFlashKey(barId: string): string {
   return `thebar:order-tabs:flash:${barId}`;
+}
+
+function orderDetailPanelKey(barId: string, orderTabId: string): string {
+  return `thebar:order-tabs:detail-panel:${barId}:${orderTabId}`;
+}
+
+function requestOrderDetailPanel(barId: string, orderTabId: string, panel: OrderDetailPanel) {
+  if (typeof window === "undefined") return;
+  const key = orderDetailPanelKey(barId, orderTabId);
+  if (panel === "order") window.sessionStorage.removeItem(key);
+  else window.sessionStorage.setItem(key, panel);
+}
+
+function takeRequestedOrderDetailPanel(barId: string, orderTabId: string): OrderDetailPanel {
+  if (typeof window === "undefined") return "order";
+  const key = orderDetailPanelKey(barId, orderTabId);
+  const value = window.sessionStorage.getItem(key);
+  window.sessionStorage.removeItem(key);
+  return value === "settlement" ? "settlement" : "order";
 }
 
 function formatMoney(amountMinor: number, currency: string): string {

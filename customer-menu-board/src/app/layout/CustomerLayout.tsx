@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   DEFAULT_PUBLIC_MENU_CONCEPT,
   publicMenuConceptOptions,
@@ -132,11 +132,30 @@ function HeroActions({
   query: string;
   onQueryChange: (query: string) => void;
 }) {
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const searchMenuRef = useRef<HTMLDetailsElement | null>(null);
+
+  useEffect(() => {
+    if (!isMenuBook || !isSearchOpen) return undefined;
+    const closeOnOutsidePointer = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (!searchMenuRef.current?.contains(target)) setIsSearchOpen(false);
+    };
+    document.addEventListener("pointerdown", closeOnOutsidePointer);
+    return () => document.removeEventListener("pointerdown", closeOnOutsidePointer);
+  }, [isMenuBook, isSearchOpen]);
+
   return (
     <div className="customer-hero-actions">
       {!isMenuBook ? <span className="route-chip">/{encodedSlug}</span> : null}
       {isMenuBook ? (
-        <details className="customer-search-menu">
+        <details
+          className="customer-search-menu"
+          onToggle={(event) => setIsSearchOpen(event.currentTarget.open)}
+          open={isSearchOpen}
+          ref={searchMenuRef}
+        >
           <summary role="button"><span>검색</span></summary>
           <div className="customer-search-popover" role="dialog" aria-label="검색 팝업">
             <label className="search-field">
@@ -214,7 +233,13 @@ function StoreInfoDialog({ menu, onClose }: { menu: PublicMenu; onClose: () => v
           {hours.length > 0 ? (
             <div>
               <dt>영업 시간</dt>
-              <dd>{hours.join(" · ")}</dd>
+              <dd>
+                <ul className="customer-hours-list" aria-label="영업 시간 목록">
+                  {hours.map((hour) => (
+                    <li key={hour}>{hour}</li>
+                  ))}
+                </ul>
+              </dd>
             </div>
           ) : null}
         </dl>

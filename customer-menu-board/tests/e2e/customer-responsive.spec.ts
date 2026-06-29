@@ -115,12 +115,20 @@ for (const viewport of viewports) {
     await expect(storeDialog).toBeVisible();
     await expect(storeDialog.getByText("02-1234-5678")).toBeVisible();
     await expect(storeDialog.getByRole("link", { name: "Instagram" })).toBeVisible();
+    const hoursList = storeDialog.getByLabel("영업 시간 목록");
+    await expect(hoursList.locator("li")).toHaveCount(2);
+    await expect(hoursList.getByText("화 18:00-02:00")).toBeVisible();
+    await expect(hoursList.getByText("수 18:00-02:00")).toBeVisible();
     await storeDialog.getByRole("button", { name: "닫기" }).click();
     await expect(storeDialog).toBeHidden();
 
     await expect(page.locator(".book-menu-row", { hasText: "하우스 하이볼" })).toBeVisible();
     await page.getByRole("button", { name: "검색" }).click();
+    const searchDialog = page.getByRole("dialog", { name: "검색 팝업" });
+    await expect(searchDialog).toBeVisible();
     await page.getByLabel("메뉴 검색").fill("맥");
+    await page.locator(".customer-hero h1").click();
+    await expect(searchDialog).toBeHidden();
     const whiskyRow = page.locator(".book-menu-row", { hasText: "맥캘란 12" });
     await expect(whiskyRow).toBeVisible();
     await expect(whiskyRow.locator("b", { hasText: "18,000" })).toBeVisible();
@@ -138,6 +146,8 @@ for (const viewport of viewports) {
     await expect(whiskyRow.getByText("Speyside")).toHaveCount(0);
     await detailDialog.getByRole("button", { name: "닫기" }).click();
 
+    await page.getByRole("button", { name: "검색" }).click();
+    await expect(searchDialog).toBeVisible();
     await page.getByLabel("메뉴 검색").fill("");
     await page.getByRole("button", { name: "검색" }).click();
     await page.getByRole("button", { name: "칵테일" }).click();

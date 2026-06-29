@@ -41,6 +41,21 @@ async function expectTouchTargets(page: Page) {
   expect(smallTargets).toEqual([]);
 }
 
+async function expectOrderStatusBadgeOpticallyCentered(scope: ReturnType<Page["locator"]>) {
+  const metrics = await scope.locator(".order-status-badge").filter({ hasText: "열림" }).first().evaluate((badge) => {
+    const label = badge.querySelector(".order-status-badge-label");
+    if (!label) throw new Error("Order status badge label is missing");
+    const badgeRect = badge.getBoundingClientRect();
+    const labelRect = label.getBoundingClientRect();
+    return {
+      badgeDisplay: getComputedStyle(badge).display,
+      centerDelta: (labelRect.top + labelRect.height / 2) - (badgeRect.top + badgeRect.height / 2)
+    };
+  });
+  expect(metrics.badgeDisplay).toContain("flex");
+  expect(Math.abs(metrics.centerDelta)).toBeLessThanOrEqual(1.5);
+}
+
 for (const viewport of viewports) {
   test(`D21 checkout settlement cancellation summary and resize at ${viewport.label}`, async ({ page }, testInfo) => {
     await page.request.post("/__dev/reset-auth?fixtures=full");
@@ -56,6 +71,7 @@ for (const viewport of viewports) {
     await expect(operationsSummary.getByText("열린 테이블")).toBeVisible();
     await expect(operationsSummary.getByText("계산 요청 큐")).toBeVisible();
     await expect(page.locator(".orders-list-panel tr:visible, .orders-list-panel article:visible").filter({ hasText: "A1" }).first()).toBeVisible();
+    await expectOrderStatusBadgeOpticallyCentered(page.locator(".orders-list-panel article:visible").filter({ hasText: "A1" }).first());
     await expect(page.locator(".orders-list-panel tr:visible, .orders-list-panel article:visible").filter({ hasText: "계산 요청" }).first()).toBeVisible();
     if (viewport.width >= 768) {
       const sidebar = page.locator(".sidebar");
@@ -83,6 +99,29 @@ for (const viewport of viewports) {
     await page.locator(".page-return-row").getByRole("button", { name: "목록으로 가기" }).click();
     await expect(page).toHaveURL(new RegExp(`/bars/${barId}/orders$`));
 
+    await createdRow.getByRole("button", { name: "정산" }).click();
+    await expect(page).toHaveURL(new RegExp(`/bars/${barId}/orders/(?!new$)[^/]+$`));
+    await expect(page.getByRole("tab", { name: /결제·정산/ })).toHaveAttribute("aria-selected", "true");
+    await expect(page.locator("#settlement-work-panel")).toBeVisible();
+    await page.locator(".page-return-row").getByRole("button", { name: "목록으로 가기" }).click();
+    await expect(page).toHaveURL(new RegExp(`/bars/${barId}/orders$`));
+
+    const cancelTableLabel = `C-${viewport.label}`;
+    await page.getByRole("button", { name: "테이블 생성", exact: true }).click();
+    await page.getByLabel("새 테이블 라벨").fill(cancelTableLabel);
+    await page.getByLabel("새 테이블 손님 설명").fill("목록 취소 검증");
+    await page.locator("#order-tab-create-form").getByRole("button", { name: "테이블 생성" }).click();
+    await expect(page).toHaveURL(new RegExp(`/bars/${barId}/orders$`));
+    const cancelRow = page.locator(".orders-list-panel tr:visible, .orders-list-panel article:visible").filter({ hasText: cancelTableLabel }).first();
+    await expect(cancelRow).toBeVisible();
+    page.once("dialog", async (dialog) => {
+      expect(dialog.message()).toContain("테이블을 취소할까요");
+      await dialog.accept();
+    });
+    await cancelRow.getByRole("button", { name: "취소", exact: true }).click();
+    await expect(page.getByText(/테이블을 취소했습니다\./)).toBeVisible();
+    await expect(cancelRow.locator(".status-badge").filter({ hasText: /^취소$/ })).toBeVisible();
+
     await createdRow.getByRole("button", { name: "상세" }).click();
     await expect(page).toHaveURL(new RegExp(`/bars/${barId}/orders/(?!new$)[^/]+$`));
     const orderTabId = new URL(page.url()).pathname.split("/").at(-1) ?? "";
@@ -91,8 +130,22 @@ for (const viewport of viewports) {
     await expect(page.getByRole("tab", { name: /주문 편집/ })).toHaveAttribute("aria-selected", "true");
     await expect(page.locator("#order-work-panel")).toBeVisible();
     await expect(page.locator("#settlement-work-panel")).toBeHidden();
+    await expect(page.locator(".orders-detail-page .hero-panel .status-box")).toHaveCount(0);
+    await expect(page.getByLabel("정산 요약")).toBeVisible();
+    await expect(page.getByLabel("정산 요약").getByText("메뉴 합계")).toBeVisible();
+    await expect(page.locator("#order-work-panel").getByRole("button", { name: "정산 완료" })).toHaveCount(0);
+    const orderLinesBox = await page.locator(".order-work-card").boundingBox();
+    const addToggleBox = await page.getByRole("button", { name: "+ 메뉴 또는 기타 항목 추가" }).boundingBox();
+    if (!orderLinesBox || !addToggleBox) throw new Error("Order detail layout sections are missing");
+    expect(orderLinesBox.y).toBeLessThanOrEqual(addToggleBox.y + 1);
     await expect(page.locator(".orders-event-disclosure")).not.toHaveAttribute("open", "");
     await expect(page.getByLabel("테이블 이벤트")).toBeHidden();
+
+    await page.getByRole("button", { name: "+ 메뉴 또는 기타 항목 추가" }).click();
+    await expect(page.getByLabel("주문 메뉴 검색")).toBeVisible();
+    const menuPickerBox = await page.locator(".order-menu-picker-panel").boundingBox();
+    if (!menuPickerBox) throw new Error("Order menu picker is missing after opening add panel");
+    expect(addToggleBox.y).toBeLessThanOrEqual(menuPickerBox.y + 1);
 
     await page.getByLabel("주문 메뉴 검색").fill("맥");
     await page.setViewportSize({ width: 390, height: 844 });
@@ -124,12 +177,12 @@ for (const viewport of viewports) {
     await page.getByLabel("기타 항목 단가").fill("5000");
     await page.getByLabel("기타 항목 수량").fill("2");
     await page.getByLabel("기타 항목 사유").fill("라이브 커버");
-    await page.getByRole("button", { name: "기타 항목 추가" }).click();
+    await page.getByRole("button", { name: "기타 항목 추가", exact: true }).click();
     await expect(page.getByText("기타 주문 항목을 추가했습니다.")).toBeVisible();
     const coverLine = page.locator(".order-line-card").filter({ hasText: "커버차지" });
     await expect(coverLine).toBeVisible();
     await expect(coverLine.getByText("10,000 KRW")).toBeVisible();
-    await expect(page.locator(".orders-detail-page .hero-panel .status-box").getByText("64,000 KRW")).toBeVisible();
+    await expect(page.locator(".settlement-final-total").getByText("64,000 KRW")).toBeVisible();
 
     await page.getByLabel("조정 금액").fill("-4000");
     await page.getByLabel("금액 조정 사유").fill("단골 할인");
@@ -138,7 +191,7 @@ for (const viewport of viewports) {
     const discountLine = page.locator(".order-line-card").filter({ hasText: "단골 할인" });
     await expect(discountLine).toBeVisible();
     await expect(discountLine.locator("strong").getByText("-4,000 KRW", { exact: true })).toBeVisible();
-    await expect(page.locator(".orders-detail-page .hero-panel .status-box").getByText("60,000 KRW")).toBeVisible();
+    await expect(page.locator(".settlement-final-total").getByText("60,000 KRW")).toBeVisible();
 
     await page.getByLabel("금액 조정 구분").selectOption("추가금");
     await page.getByLabel("조정 금액").fill("2000");
@@ -148,14 +201,14 @@ for (const viewport of viewports) {
     const surchargeLine = page.locator(".order-line-card").filter({ hasText: "잔 파손" });
     await expect(surchargeLine).toBeVisible();
     await expect(surchargeLine.locator("strong").getByText("2,000 KRW", { exact: true })).toBeVisible();
-    await expect(page.locator(".orders-detail-page .hero-panel .status-box").getByText("62,000 KRW")).toBeVisible();
+    await expect(page.locator(".settlement-final-total").getByText("62,000 KRW")).toBeVisible();
 
     await discountLine.getByRole("button", { name: "취소" }).click();
     await page.getByLabel("취소 사유", { exact: true }).fill("오입력");
     await page.getByRole("button", { name: "취소 확정" }).click();
     await expect(page.getByText("주문 항목을 취소 처리했습니다.")).toBeVisible();
     await expect(page.getByText("취소: 오입력")).toBeVisible();
-    await expect(page.locator(".orders-detail-page .hero-panel .status-box").getByText("66,000 KRW")).toBeVisible();
+    await expect(page.locator(".settlement-final-total").getByText("66,000 KRW")).toBeVisible();
 
     await page.getByRole("tab", { name: /결제·정산/ }).click();
     await expect(page.getByRole("tab", { name: /결제·정산/ })).toHaveAttribute("aria-selected", "true");
@@ -164,7 +217,7 @@ for (const viewport of viewports) {
     await page.locator(".order-settlement-panel").getByRole("button", { name: "계산 요청", exact: true }).click();
     await expect(page.getByText("계산 요청으로 표시했습니다.")).toBeVisible();
     await expect(page.getByText("계산 요청 중", { exact: true })).toBeVisible();
-    await expect(page.locator(".orders-detail-page .hero-panel .status-box").getByText("66,000 KRW")).toBeVisible();
+    await expect(page.locator(".order-settlement-panel").getByText("66,000 KRW")).toBeVisible();
 
     await page.getByLabel("정산 메모").fill(`이체 확인 ${viewport.label}`);
     await expect(page.locator(".settlement-confirm-card")).toBeVisible();
@@ -212,6 +265,7 @@ for (const viewport of viewports) {
     await page.goto(`/bars/${barId}/orders`);
     await page.locator(".orders-list-panel tr:visible, .orders-list-panel article:visible").filter({ hasText: "A1" }).first().getByRole("button", { name: "상세" }).click();
     await expect(page).toHaveURL(new RegExp(`/bars/${barId}/orders/[^/]+$`));
+    await page.getByRole("button", { name: "+ 메뉴 또는 기타 항목 추가" }).click();
     await expect(page.getByRole("heading", { name: "기타 항목·금액 조정" })).toHaveCount(0);
     await expect(page.getByLabel("기타 항목명")).toHaveCount(0);
     await expect(page.getByLabel("조정 금액")).toHaveCount(0);
