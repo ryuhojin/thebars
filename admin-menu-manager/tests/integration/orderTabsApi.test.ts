@@ -1074,13 +1074,26 @@ describe("D21 checkout, settlement, cancellation, and daily summary API", () => 
       cancelledReason: "전체 주문 void 후 취소"
     });
 
-    const list = await getJson(runtime.app, `/api/bars/${bar.id}/order-tabs`, staff.cookie);
-    const listData = (await readJsonObject(list)).data as OrderTabsResponse;
-    expect(listData.dailySummary).toMatchObject({
+    const defaultList = await getJson(runtime.app, `/api/bars/${bar.id}/order-tabs`, staff.cookie);
+    const defaultListData = (await readJsonObject(defaultList)).data as OrderTabsResponse;
+    expect(defaultListData.query.status).toBe("active");
+    expect(defaultListData.tabs.map((tab) => tab.status)).toEqual([]);
+    expect(defaultListData.dailySummary).toMatchObject({
       businessDate: "2026-06-23",
       settledTabCount: 0,
       cancelledTabCount: 2,
       settledTotalAmountMinor: 0
     });
+
+    const cancelledList = await getJson(runtime.app, `/api/bars/${bar.id}/order-tabs?status=cancelled`, staff.cookie);
+    const cancelledListData = (await readJsonObject(cancelledList)).data as OrderTabsResponse;
+    expect(cancelledListData.tabs.map((tab) => tab.tableLabel)).toEqual(["활성 주문", "빈 테이블"]);
+    expect(cancelledListData.tabs.every((tab) => tab.status === "cancelled")).toBe(true);
+
+    const allList = await getJson(runtime.app, `/api/bars/${bar.id}/order-tabs?status=all`, staff.cookie);
+    const allListData = (await readJsonObject(allList)).data as OrderTabsResponse;
+    expect(allListData.query.status).toBe("all");
+    expect(allListData.tabs.map((tab) => tab.tableLabel)).toEqual(["활성 주문", "빈 테이블"]);
+    expect(allListData.tabs.every((tab) => tab.status === "cancelled")).toBe(true);
   });
 });

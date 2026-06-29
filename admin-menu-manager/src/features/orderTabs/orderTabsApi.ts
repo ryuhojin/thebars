@@ -179,7 +179,7 @@ function csrfToken(): string {
 
 function toSearchParams(query: OrderTabListQuery): string {
   const params = new URLSearchParams();
-  if (query.status && query.status !== "all") params.set("status", query.status);
+  if (query.status) params.set("status", query.status);
   if (query.query?.trim()) params.set("query", query.query.trim());
   const text = params.toString();
   return text ? `?${text}` : "";

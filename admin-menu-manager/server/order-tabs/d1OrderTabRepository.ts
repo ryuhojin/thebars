@@ -121,7 +121,9 @@ export class D1OrderTabRepository implements OrderTabRepository {
   async listOrderTabs(barId: string, query: OrderTabListQuery): Promise<OrderTabRecord[]> {
     const where = ["bar_id = ?"];
     const params: unknown[] = [barId];
-    if (query.status && query.status !== "all") {
+    if (query.status === "active") {
+      where.push("status IN ('open', 'checkout_requested')");
+    } else if (query.status && query.status !== "all") {
       where.push("status = ?");
       params.push(query.status);
     }

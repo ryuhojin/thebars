@@ -5,8 +5,8 @@ import type {
   OrderTabDto,
   OrderTabEventType,
   OrderTabItemDto,
-  OrderTabListQuery,
   OrderTabStatus,
+  OrderTabStatusFilter,
   OrderTabsResponse
 } from "../../../contracts/orderTabs";
 import { LoadingSkeleton } from "../../components/feedback/LoadingSkeleton";
@@ -103,7 +103,7 @@ export function OrderTabsPage({
   const [detailState, setDetailState] = useState<LoadState<OrderTabDetailResponse> | null>(orderTabId ? { status: "loading" } : null);
   const [listReloadKey, setListReloadKey] = useState(0);
   const [detailReloadKey] = useState(0);
-  const [statusFilter, setStatusFilter] = useState<OrderTabListQuery["status"]>("all");
+  const [statusFilter, setStatusFilter] = useState<OrderTabStatusFilter>("active");
   const [query, setQuery] = useState("");
   const [listMessage, setListMessage] = useState("");
   const [createFormState, setCreateFormState] = useState<CreateForm>(emptyCreateForm);
@@ -546,7 +546,13 @@ export function OrderTabsPage({
   if (listState.status !== "ready") return <OrdersStatusState state={listState} navigate={navigate} />;
 
   const summary = listState.data.summary;
+  const activeTabCount = summary.open + summary.checkoutRequested;
   const checkoutQueue = listState.data.tabs.filter((tab) => tab.status === "checkout_requested");
+  const checkoutQueueLabel = checkoutQueue.length
+    ? checkoutQueue.map((tab) => `${tab.displayCode} ${tab.tableLabel}`).join(", ")
+    : summary.checkoutRequested
+      ? `${summary.checkoutRequested}개 대기`
+      : "대기 없음";
 
   if (isCreateRoute) {
     return (
@@ -564,7 +570,7 @@ export function OrderTabsPage({
           </div>
           <div className="status-box" role="status">
             <span>현재 운영</span>
-            <strong>{summary.open + summary.checkoutRequested}개 테이블</strong>
+            <strong>{activeTabCount}개 테이블</strong>
             <small>계산 요청 {summary.checkoutRequested}개 · 전체 {summary.total}개</small>
           </div>
         </section>
@@ -628,7 +634,7 @@ export function OrderTabsPage({
         </div>
         <div className="status-box" role="status">
           <span>운영 중</span>
-          <strong>{summary.open + summary.checkoutRequested}개 테이블</strong>
+          <strong>{activeTabCount}개 테이블</strong>
           <small>계산 요청 {summary.checkoutRequested}개 · 전체 {summary.total}개</small>
         </div>
       </section>
@@ -642,7 +648,7 @@ export function OrderTabsPage({
         <div>
           <span>계산 요청 큐</span>
           <strong>{summary.checkoutRequested}개</strong>
-          <small>{checkoutQueue.length ? checkoutQueue.map((tab) => `${tab.displayCode} ${tab.tableLabel}`).join(", ") : "대기 없음"}</small>
+          <small>{checkoutQueueLabel}</small>
         </div>
         <div>
           <span>전체 테이블</span>
@@ -670,17 +676,18 @@ export function OrderTabsPage({
         </div>
         <div className="orders-status-tabs" role="group" aria-label="테이블 상태 필터">
           {[
+            ["active", `운영 중 ${activeTabCount}`],
             ["open", `열림 ${summary.open}`],
             ["checkout_requested", `계산 요청 ${summary.checkoutRequested}`],
-            ["all", `전체 ${summary.total}`],
-            ["cancelled", `취소 ${summary.cancelled}`]
+            ["cancelled", `취소 ${summary.cancelled}`],
+            ["all", `전체 기록 ${summary.total}`]
           ].map(([value, label]) => (
             <button
               className={statusFilter === value ? "status-filter-tab is-active" : "status-filter-tab"}
               type="button"
               aria-pressed={statusFilter === value}
               key={value}
-              onClick={() => setStatusFilter(value as OrderTabListQuery["status"])}
+              onClick={() => setStatusFilter(value as OrderTabStatusFilter)}
             >
               {label}
             </button>
@@ -703,8 +710,8 @@ export function OrderTabsPage({
         <section className="panel orders-list-panel" aria-labelledby="orders-list-title">
           <div className="section-heading">
             <div>
-              <p className="eyebrow">열린 테이블</p>
-              <h2 id="orders-list-title">현재 테이블</h2>
+              <p className="eyebrow">{orderListEyebrow(statusFilter)}</p>
+              <h2 id="orders-list-title">{orderListTitle(statusFilter)}</h2>
             </div>
             <div className="inline-actions">
               <span className="status-badge active">{listState.data.tabs.length}개 표시</span>
@@ -902,6 +909,22 @@ function OrderTabList({
   );
 }
 
+function orderListEyebrow(status: OrderTabStatusFilter): string {
+  if (status === "cancelled") return "취소 기록";
+  if (status === "all") return "전체 기록";
+  if (status === "checkout_requested") return "계산 요청";
+  if (status === "open") return "열린 테이블";
+  return "운영 중";
+}
+
+function orderListTitle(status: OrderTabStatusFilter): string {
+  if (status === "cancelled") return "취소된 테이블";
+  if (status === "all") return "전체 테이블 기록";
+  if (status === "checkout_requested") return "계산 요청 테이블";
+  if (status === "open") return "열린 테이블";
+  return "현재 테이블";
+}
+
 function OrderTabActions({
   cancelling,
   tab,
@@ -921,12 +944,16 @@ function OrderTabActions({
       <button className="button secondary compact" type="button" onClick={() => onSelect(tab.id)}>
         상세
       </button>
-      <button className="button danger compact" type="button" disabled={isTerminal || cancelling} onClick={() => onCancel(tab)}>
-        {cancelling ? "취소 중" : "취소"}
-      </button>
-      <button className="button primary compact" type="button" disabled={tab.status === "closed" || tab.status === "cancelled"} onClick={() => onSettle(tab.id)}>
-        정산
-      </button>
+      {isTerminal ? null : (
+        <>
+          <button className="button danger compact" type="button" disabled={cancelling} onClick={() => onCancel(tab)}>
+            {cancelling ? "취소 중" : "취소"}
+          </button>
+          <button className="button primary compact" type="button" onClick={() => onSettle(tab.id)}>
+            정산
+          </button>
+        </>
+      )}
     </div>
   );
 }

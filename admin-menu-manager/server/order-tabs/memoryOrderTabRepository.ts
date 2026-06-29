@@ -46,7 +46,11 @@ export class MemoryOrderTabRepository implements OrderTabRepository {
     const text = normalizeSearch(query.query ?? "");
     return [...this.tabs.values()]
       .filter((tab) => tab.barId === barId)
-      .filter((tab) => status === "all" || tab.status === status)
+      .filter((tab) => {
+        if (status === "all") return true;
+        if (status === "active") return tab.status === "open" || tab.status === "checkout_requested";
+        return tab.status === status;
+      })
       .filter((tab) => !text || normalizeSearch(`#${tab.tabNumber} ${tab.tableLabel} ${tab.guestDescription}`).includes(text))
       .sort((left, right) => sortByStatus(left.status) - sortByStatus(right.status) || right.updatedAt.localeCompare(left.updatedAt) || right.tabNumber - left.tabNumber)
       .map(cloneTab);

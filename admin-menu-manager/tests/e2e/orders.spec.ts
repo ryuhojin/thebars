@@ -120,9 +120,26 @@ for (const viewport of viewports) {
     });
     await cancelRow.getByRole("button", { name: "취소", exact: true }).click();
     await expect(page.getByText(/테이블을 취소했습니다\./)).toBeVisible();
-    await expect(cancelRow.locator(".status-badge").filter({ hasText: /^취소$/ })).toBeVisible();
+    await expect(page.locator(".orders-list-panel tr:visible, .orders-list-panel article:visible").filter({ hasText: cancelTableLabel })).toHaveCount(0);
+    await page.getByRole("button", { name: /취소 \d+/ }).click();
+    const cancelledRow = page.locator(".orders-list-panel tr:visible, .orders-list-panel article:visible").filter({ hasText: cancelTableLabel }).first();
+    await expect(cancelledRow).toBeVisible();
+    await expect(cancelledRow.locator(".status-badge").filter({ hasText: /^취소$/ })).toBeVisible();
+    await expect(cancelledRow.getByRole("button", { name: "상세" })).toBeVisible();
+    await expect(cancelledRow.getByRole("button", { name: "취소", exact: true })).toHaveCount(0);
+    await expect(cancelledRow.getByRole("button", { name: "정산" })).toHaveCount(0);
+    await page.getByRole("button", { name: /전체 기록 \d+/ }).click();
+    const allRecordCancelledRow = page.locator(".orders-list-panel tr:visible, .orders-list-panel article:visible").filter({ hasText: cancelTableLabel }).first();
+    await expect(allRecordCancelledRow).toBeVisible();
+    await expect(allRecordCancelledRow.locator(".status-badge").filter({ hasText: /^취소$/ })).toBeVisible();
+    await expect(allRecordCancelledRow.getByRole("button", { name: "상세" })).toBeVisible();
+    await expect(allRecordCancelledRow.getByRole("button", { name: "취소", exact: true })).toHaveCount(0);
+    await expect(allRecordCancelledRow.getByRole("button", { name: "정산" })).toHaveCount(0);
+    await page.getByRole("button", { name: /운영 중 \d+/ }).click();
+    const activeCreatedRow = page.locator(".orders-list-panel tr:visible, .orders-list-panel article:visible").filter({ hasText: tableLabel }).first();
+    await expect(activeCreatedRow).toBeVisible();
 
-    await createdRow.getByRole("button", { name: "상세" }).click();
+    await activeCreatedRow.getByRole("button", { name: "상세" }).click();
     await expect(page).toHaveURL(new RegExp(`/bars/${barId}/orders/(?!new$)[^/]+$`));
     const orderTabId = new URL(page.url()).pathname.split("/").at(-1) ?? "";
     await expect(page.locator(".page-return-row").getByRole("button", { name: "목록으로 가기" })).toBeVisible();

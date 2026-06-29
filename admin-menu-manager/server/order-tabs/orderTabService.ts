@@ -641,7 +641,7 @@ export class OrderTabService {
 
 function normalizeQuery(query: OrderTabListQuery): Required<OrderTabListQuery> {
   return {
-    status: query.status ?? "all",
+    status: query.status ?? "active",
     query: query.query ?? ""
   };
 }

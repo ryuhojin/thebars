@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 export const orderTabStatusSchema = z.enum(["open", "checkout_requested", "closed", "cancelled"]);
-export const orderTabStatusFilterSchema = z.enum(["all", "open", "checkout_requested", "closed", "cancelled"]).default("all");
+export const orderTabStatusFilterSchema = z.enum(["active", "all", "open", "checkout_requested", "closed", "cancelled"]).default("active");
 export const orderTabEventTypeSchema = z.enum([
   "tab_created",
   "tab_updated",
