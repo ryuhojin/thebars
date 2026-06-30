@@ -244,8 +244,9 @@ export function CategoriesPage({ barId, navigate }: { barId: string; navigate: N
           <p>{state.data.bar.name}의 2단계 카테고리를 생성, 정렬, 이동, 숨김 처리합니다.</p>
         </div>
         <div className="status-box" role="status">
-          <span>단일 URL</span>
-          <strong>/bars/{barId}/categories</strong>
+          <span>카테고리</span>
+          <strong>{state.data.categories.length}개</strong>
+          <small>하위 카테고리 {state.data.categories.filter((category) => category.parentId !== null).length}개</small>
           <button className="button secondary compact" type="button" onClick={() => setReloadKey((value) => value + 1)}>
             새로고침
           </button>

@@ -68,7 +68,12 @@ async function expectTouchTargets(page: Page) {
     elements
       .map((element) => {
         const rect = element.getBoundingClientRect();
-        return { text: element.textContent?.trim() ?? element.getAttribute("aria-label") ?? "", height: rect.height };
+        const label = element.matches("input[type='checkbox'], input[type='radio']") ? element.closest("label") : null;
+        const labelRect = label?.getBoundingClientRect();
+        return {
+          text: element.textContent?.trim() ?? element.getAttribute("aria-label") ?? "",
+          height: Math.max(rect.height, labelRect?.height ?? 0)
+        };
       })
       .filter((item) => item.height > 0 && item.height < 44)
   );
@@ -168,6 +173,28 @@ test("D23 keyboard login, compact drawer, 360px width, and focus restore", async
   await keyboardLogin(page, "admin1", "AdminPass!1");
   await expect(page.getByLabel("현재 작업 바")).toBeVisible();
   await expectNoHorizontalOverflow(page);
+  const logoutButtonStyle = await page.getByRole("button", { name: "로그아웃" }).evaluate((button) => ({
+    lineHeight: getComputedStyle(button).lineHeight,
+    whiteSpace: getComputedStyle(button).whiteSpace,
+    wordBreak: getComputedStyle(button).wordBreak
+  }));
+  expect(logoutButtonStyle.whiteSpace).toBe("nowrap");
+  expect(logoutButtonStyle.wordBreak).toBe("keep-all");
+  const compactHeaderMetrics = await page.evaluate(() => {
+    const menu = document.querySelector<HTMLElement>(".drawer-toggle");
+    const logout = document.querySelector<HTMLElement>(".header-logout-button");
+    const barSwitcher = document.querySelector<HTMLElement>(".bar-switcher");
+    if (!menu || !logout || !barSwitcher) throw new Error("compact header controls missing");
+    const menuRect = menu.getBoundingClientRect();
+    const logoutRect = logout.getBoundingClientRect();
+    const barRect = barSwitcher.getBoundingClientRect();
+    return {
+      firstRowDelta: Math.abs(menuRect.top - logoutRect.top),
+      logoutBeforeBarSwitcher: logoutRect.bottom <= barRect.top
+    };
+  });
+  expect(compactHeaderMetrics.firstRowDelta).toBeLessThanOrEqual(2);
+  expect(compactHeaderMetrics.logoutBeforeBarSwitcher).toBe(true);
 
   await page.evaluate(() => {
     document.documentElement.style.zoom = "2";
@@ -178,9 +205,35 @@ test("D23 keyboard login, compact drawer, 360px width, and focus restore", async
     document.documentElement.style.zoom = "";
   });
 
+  await page.setViewportSize({ width: 360, height: 520 });
   await page.getByLabel("내비게이션 열기").focus();
   await page.keyboard.press("Enter");
-  await expect(page.getByRole("navigation", { name: "Compact 관리자 주요 메뉴" })).toBeVisible();
+  const drawer = page.getByRole("navigation", { name: "Compact 관리자 주요 메뉴" });
+  await expect(drawer).toBeVisible();
+  const drawerScroll = await drawer.evaluate((element) => {
+    element.scrollTop = 0;
+    element.scrollTop = element.scrollHeight;
+    const header = element.querySelector(".drawer-header");
+    if (!header) throw new Error("drawer header missing");
+    const rect = header.getBoundingClientRect();
+    const drawerRect = element.getBoundingClientRect();
+    const hit = document.elementFromPoint(drawerRect.left + drawerRect.width / 2, drawerRect.top + 12);
+    return {
+      clientHeight: element.clientHeight,
+      headerTopDelta: Math.abs(rect.top - drawerRect.top),
+      headerWidthDelta: Math.abs(rect.width - drawerRect.width),
+      headerCoversScroll: Boolean(hit?.closest(".drawer-header")),
+      overflowY: getComputedStyle(element).overflowY,
+      scrollHeight: element.scrollHeight,
+      scrollTop: element.scrollTop
+    };
+  });
+  expect(drawerScroll.overflowY).toBe("auto");
+  expect(drawerScroll.headerTopDelta).toBeLessThanOrEqual(1);
+  expect(drawerScroll.headerWidthDelta).toBeLessThanOrEqual(1);
+  expect(drawerScroll.headerCoversScroll).toBe(true);
+  expect(drawerScroll.scrollHeight).toBeGreaterThan(drawerScroll.clientHeight);
+  expect(drawerScroll.scrollTop).toBeGreaterThan(0);
   await page.getByLabel("내비게이션 닫기").focus();
   await page.keyboard.press("Enter");
   await expect(page.getByRole("navigation", { name: "Compact 관리자 주요 메뉴" })).toHaveCount(0);
@@ -249,8 +302,17 @@ test("D23 staff sidebar exposes only permitted menus", async ({ page }) => {
   await expect(sidebar.getByRole("link", { name: /정산 내역/ })).toBeVisible();
   await expect(sidebar.getByRole("link", { name: /카테고리/ })).toHaveCount(0);
   await expect(sidebar.getByRole("link", { name: "메뉴", exact: true })).toHaveCount(0);
+  await expect(sidebar.getByRole("link", { name: /품목 유형/ })).toHaveCount(0);
+  await expect(sidebar.getByRole("link", { name: /배지/ })).toHaveCount(0);
   await expect(sidebar.getByRole("link", { name: /바 회원/ })).toHaveCount(0);
   await expect(sidebar.getByRole("link", { name: /사용자 계정/ })).toHaveCount(0);
+
+  await page.goto("/system/item-types");
+  await expect(page.getByRole("heading", { name: "시스템 관리자 권한이 필요합니다." })).toBeVisible();
+  await expect(page.getByRole("button", { name: "품목 유형 추가" })).toHaveCount(0);
+  await page.goto("/system/badges");
+  await expect(page.getByRole("heading", { name: "시스템 관리자 권한이 필요합니다." })).toBeVisible();
+  await expect(page.getByRole("button", { name: "새 공통 배지" })).toHaveCount(0);
 
   await page.setViewportSize({ width: 768, height: 1024 });
   await expect(sidebar.locator(".nav-group-label").first()).toHaveText("주문 운영");

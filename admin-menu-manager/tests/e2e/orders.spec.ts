@@ -34,7 +34,12 @@ async function expectTouchTargets(page: Page) {
     elements
       .map((element) => {
         const rect = element.getBoundingClientRect();
-        return { text: element.textContent?.trim() ?? element.getAttribute("aria-label") ?? "", height: rect.height };
+        const label = element.matches("input[type='checkbox'], input[type='radio']") ? element.closest("label") : null;
+        const labelRect = label?.getBoundingClientRect();
+        return {
+          text: element.textContent?.trim() ?? element.getAttribute("aria-label") ?? "",
+          height: Math.max(rect.height, labelRect?.height ?? 0)
+        };
       })
       .filter((item) => item.height > 0 && item.height < 44)
   );
@@ -68,8 +73,15 @@ for (const viewport of viewports) {
     await expect(page.getByRole("heading", { name: "테이블 목록" })).toBeVisible();
     await expect(page.getByLabel("현재 작업 바")).toHaveValue(barId);
     const operationsSummary = page.getByLabel("테이블 운영 요약");
-    await expect(operationsSummary.getByText("열린 테이블")).toBeVisible();
-    await expect(operationsSummary.getByText("계산 요청 큐")).toBeVisible();
+    const previewShortcut = page.locator(".orders-toolbar-panel").getByRole("link", { name: "메뉴판 확인" });
+    if (viewport.width < 768) {
+      await expect(operationsSummary).toBeHidden();
+      await expect(previewShortcut).toBeHidden();
+    } else {
+      await expect(operationsSummary.getByText("열린 테이블")).toBeVisible();
+      await expect(operationsSummary.getByText("계산 요청 큐")).toBeVisible();
+      await expect(previewShortcut).toBeVisible();
+    }
     await expect(page.locator(".orders-list-panel tr:visible, .orders-list-panel article:visible").filter({ hasText: "A1" }).first()).toBeVisible();
     await expectOrderStatusBadgeOpticallyCentered(page.locator(".orders-list-panel article:visible").filter({ hasText: "A1" }).first());
     await expect(page.locator(".orders-list-panel tr:visible, .orders-list-panel article:visible").filter({ hasText: "계산 요청" }).first()).toBeVisible();
@@ -149,7 +161,8 @@ for (const viewport of viewports) {
     await expect(page.locator("#settlement-work-panel")).toBeHidden();
     await expect(page.locator(".orders-detail-page .hero-panel .status-box")).toHaveCount(0);
     await expect(page.getByLabel("정산 요약")).toBeVisible();
-    await expect(page.getByLabel("정산 요약").getByText("메뉴 합계")).toBeVisible();
+    await expect(page.getByLabel("정산 요약").getByRole("button", { name: /현재 합계/ })).toBeVisible();
+    await expect(page.getByLabel("정산 요약").getByText("메뉴 합계")).toHaveCount(0);
     await expect(page.locator("#order-work-panel").getByRole("button", { name: "정산 완료" })).toHaveCount(0);
     const orderLinesBox = await page.locator(".order-work-card").boundingBox();
     const addToggleBox = await page.getByRole("button", { name: "+ 메뉴 또는 기타 항목 추가" }).boundingBox();
@@ -163,6 +176,11 @@ for (const viewport of viewports) {
     const menuPickerBox = await page.locator(".order-menu-picker-panel").boundingBox();
     if (!menuPickerBox) throw new Error("Order menu picker is missing after opening add panel");
     expect(addToggleBox.y).toBeLessThanOrEqual(menuPickerBox.y + 1);
+    const extraActionsDisclosure = page.locator(".order-extra-inline-disclosure");
+    await expect(extraActionsDisclosure).not.toHaveAttribute("open", "");
+    await expect(extraActionsDisclosure.locator("summary")).toContainText("기타 항목·금액 조정");
+    await expect(page.getByLabel("기타 항목명")).toBeHidden();
+    await expect(page.getByLabel("조정 금액")).toBeHidden();
 
     await page.getByLabel("주문 메뉴 검색").fill("맥");
     await page.setViewportSize({ width: 390, height: 844 });
@@ -190,6 +208,10 @@ for (const viewport of viewports) {
     await expect(macallanLine.getByText("54,000 KRW")).toBeVisible();
     await expect(page.getByLabel("맥캘란 12 현재 수량")).toHaveText("3");
 
+    await extraActionsDisclosure.locator("summary").click();
+    await expect(extraActionsDisclosure).toHaveAttribute("open", "");
+    await expect(page.getByLabel("기타 항목명")).toBeVisible();
+    await expect(page.getByLabel("조정 금액")).toBeVisible();
     await page.getByLabel("기타 항목명").fill("커버차지");
     await page.getByLabel("기타 항목 단가").fill("5000");
     await page.getByLabel("기타 항목 수량").fill("2");
@@ -226,18 +248,56 @@ for (const viewport of viewports) {
     await expect(page.getByText("주문 항목을 취소 처리했습니다.")).toBeVisible();
     await expect(page.getByText("취소: 오입력")).toBeVisible();
     await expect(page.locator(".settlement-final-total").getByText("66,000 KRW")).toBeVisible();
+    await page.locator(".order-total-summary-trigger").click();
+    const summaryDialog = page.getByRole("dialog", { name: "주문 내역" });
+    await expect(summaryDialog).toBeVisible();
+    await expect(summaryDialog.getByText("맥캘란 12")).toBeVisible();
+    await expect(summaryDialog.getByText("커버차지")).toBeVisible();
+    await expect(summaryDialog.getByText("잔 파손")).toBeVisible();
+    await expect(summaryDialog.getByText("66,000 KRW")).toBeVisible();
+    await summaryDialog.getByLabel("닫기").click();
+    await expect(summaryDialog).toHaveCount(0);
 
     await page.getByRole("tab", { name: /결제·정산/ }).click();
     await expect(page.getByRole("tab", { name: /결제·정산/ })).toHaveAttribute("aria-selected", "true");
     await expect(page.locator("#settlement-work-panel")).toBeVisible();
     await expect(page.locator("#order-work-panel")).toBeHidden();
     await page.locator(".order-settlement-panel").getByRole("button", { name: "계산 요청", exact: true }).click();
+    const checkoutDialog = page.getByRole("dialog", { name: "계산 요청 전 주문 확인" });
+    await expect(checkoutDialog).toBeVisible();
+    await expect(checkoutDialog.getByText("맥캘란 12")).toBeVisible();
+    await expect(checkoutDialog.getByText("커버차지")).toBeVisible();
+    await expect(checkoutDialog.getByText("66,000 KRW")).toBeVisible();
+    const checkoutActions = await checkoutDialog.locator(".order-breakdown-dialog-actions").evaluate((element) => {
+      const buttons = Array.from(element.querySelectorAll("button")).map((button) => button.getBoundingClientRect());
+      return {
+        columns: getComputedStyle(element).gridTemplateColumns,
+        topDelta: Math.abs((buttons[0]?.top ?? 0) - (buttons[1]?.top ?? 0))
+      };
+    });
+    expect(checkoutActions.columns.split(" ").length).toBe(2);
+    expect(checkoutActions.topDelta).toBeLessThanOrEqual(2);
+    await checkoutDialog.getByRole("button", { name: "계산 요청", exact: true }).click();
     await expect(page.getByText("계산 요청으로 표시했습니다.")).toBeVisible();
     await expect(page.getByText("계산 요청 중", { exact: true })).toBeVisible();
     await expect(page.locator(".order-settlement-panel").getByText("66,000 KRW")).toBeVisible();
 
     await page.getByLabel("정산 메모").fill(`이체 확인 ${viewport.label}`);
     await expect(page.locator(".settlement-confirm-card")).toBeVisible();
+    const settlementCheckboxMetrics = await page.locator(".settlement-confirm-card").evaluate((label) => {
+      const input = label.querySelector("input[type='checkbox']");
+      if (!input) throw new Error("settlement checkbox missing");
+      const inputRect = input.getBoundingClientRect();
+      const labelRect = label.getBoundingClientRect();
+      return {
+        inputHeight: inputRect.height,
+        inputWidth: inputRect.width,
+        labelHeight: labelRect.height
+      };
+    });
+    expect(settlementCheckboxMetrics.inputWidth).toBeLessThanOrEqual(24);
+    expect(settlementCheckboxMetrics.inputHeight).toBeLessThanOrEqual(24);
+    expect(settlementCheckboxMetrics.labelHeight).toBeGreaterThanOrEqual(44);
     await page.getByLabel("계좌이체 확인").check();
     await page.setViewportSize({ width: 390, height: 844 });
     await expect(page).toHaveURL(new RegExp(`/bars/${barId}/orders/${orderTabId}$`));

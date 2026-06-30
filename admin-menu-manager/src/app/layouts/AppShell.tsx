@@ -258,7 +258,7 @@ function buildNavGroups(
     add(groupKeyForPath(activePath), activePath, window.location.pathname);
   }
 
-  if (isSystemAdmin || canEditMenu) {
+  if (isSystemAdmin) {
     add("catalog", "/system/item-types");
     add("catalog", "/system/badges");
   }

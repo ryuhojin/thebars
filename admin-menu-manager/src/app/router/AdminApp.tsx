@@ -211,10 +211,31 @@ function hasUsableBootstrapSnapshot(): boolean {
 }
 
 function ShellRoute({ route, children }: { route: ReturnType<typeof matchAdminRoute>; children: ReactNode }) {
+  const dashboard = getDashboardSnapshot();
+  const requiresSystemAdmin = route.auth === "system-admin";
+  const isSystemAdmin = dashboard?.mode === "system-admin";
   return (
     <AppShell route={route}>
-      <Suspense fallback={<RouteLoading />}>{children}</Suspense>
+      {requiresSystemAdmin && !isSystemAdmin ? (
+        <SystemAdminRequiredPage />
+      ) : (
+        <Suspense fallback={<RouteLoading />}>{children}</Suspense>
+      )}
     </AppShell>
+  );
+}
+
+function SystemAdminRequiredPage() {
+  return (
+    <div className="page-stack">
+      <section className="hero-panel" aria-labelledby="system-admin-required-title">
+        <div>
+          <p className="eyebrow">권한 확인</p>
+          <h1 id="system-admin-required-title">시스템 관리자 권한이 필요합니다.</h1>
+          <p>이 화면은 시스템 관리자에게만 공개됩니다.</p>
+        </div>
+      </section>
+    </div>
   );
 }
 

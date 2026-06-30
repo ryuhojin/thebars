@@ -127,6 +127,6 @@ test("D05 members screen blocks non-system users", async ({ page }) => {
   await page.goto(membersPath);
 
   await expect(page).toHaveURL(new RegExp(`${membersPath}$`));
-  await expect(page.getByRole("heading", { name: "접근할 수 없습니다" })).toBeVisible();
-  await expect(page.getByText("시스템 관리자만 사용할 수 있습니다.")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "시스템 관리자 권한이 필요합니다." })).toBeVisible();
+  await expect(page.getByText("이 화면은 시스템 관리자에게만 공개됩니다.")).toBeVisible();
 });

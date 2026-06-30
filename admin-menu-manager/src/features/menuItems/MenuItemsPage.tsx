@@ -16,6 +16,7 @@ import type {
   MenuItemTypeSelection,
   UpdateMenuItemRequest
 } from "../../../contracts/menuItems";
+import { AdaptiveDialog } from "../../components/adaptive/AdaptiveDialog";
 import { LoadingSkeleton } from "../../components/feedback/LoadingSkeleton";
 import { AuthApiError } from "../auth/authApi";
 import { useDirtyWarning } from "../auth/useDirtyWarning";
@@ -72,11 +73,17 @@ export function MenuItemsPage({ barId, navigate }: { barId: string; navigate: Na
   const [visibilityFilter, setVisibilityFilter] = useState<"all" | "visible" | "hidden">("all");
   const [badgeFilter, setBadgeFilter] = useState("all");
   const [selectedMenuId, setSelectedMenuId] = useState<string | null>(null);
+  const [selectionDialogOpen, setSelectionDialogOpen] = useState(false);
   const [drafts, setDrafts] = useState<Record<string, MenuListDraft>>({});
   const [bulkMessage, setBulkMessage] = useState("");
   const [saveState, setSaveState] = useState<BulkSaveState>("idle");
+  const useSelectionDialog = useSelectionDialogMode();
   const draftCount = Object.keys(drafts).length;
   useDirtyWarning(draftCount > 0 && saveState !== "saving");
+
+  useEffect(() => {
+    if (!useSelectionDialog) setSelectionDialogOpen(false);
+  }, [useSelectionDialog]);
 
   useEffect(() => {
     let cancelled = false;
@@ -111,7 +118,8 @@ export function MenuItemsPage({ barId, navigate }: { barId: string; navigate: Na
     menuMatchesFilters(item, { query, categoryFilter, itemTypeFilter, saleFilter, visibilityFilter, badgeFilter })
   );
   const categoryCounts = countMenusByCategory(effectiveItems);
-  const selectedItem = filteredItems.find((item) => item.id === selectedMenuId) ?? filteredItems[0] ?? null;
+  const explicitlySelectedItem = selectedMenuId ? filteredItems.find((item) => item.id === selectedMenuId) ?? null : null;
+  const selectedItem = explicitlySelectedItem ?? filteredItems[0] ?? null;
   const selectedSiblingIndex = selectedItem
     ? effectiveItems
         .filter((entry) => entry.categoryId === selectedItem.categoryId)
@@ -180,6 +188,11 @@ export function MenuItemsPage({ barId, navigate }: { barId: string; navigate: Na
     setSaleFilter("all");
     setVisibilityFilter("all");
     setBadgeFilter("all");
+  };
+
+  const selectMenu = (id: string) => {
+    setSelectedMenuId(id);
+    if (useSelectionDialog) setSelectionDialogOpen(true);
   };
 
   return (
@@ -336,16 +349,36 @@ export function MenuItemsPage({ barId, navigate }: { barId: string; navigate: Na
                 {bulkMessage ? <div className={`form-status ${saveState === "success" ? "success" : ""}`} role="alert">{bulkMessage}</div> : null}
                 <MenuItemsDataView
                   items={filteredItems}
-                  selectedId={selectedItem?.id ?? ""}
-                  onSelect={setSelectedMenuId}
+                  selectedId={(useSelectionDialog ? explicitlySelectedItem?.id : selectedItem?.id) ?? ""}
+                  onSelect={selectMenu}
                   onOpen={(menuItemId) => navigate(`/bars/${barId}/menus/${menuItemId}`)}
                 />
               </>
             )}
           </div>
 
+          {!useSelectionDialog ? (
+            <MenuSelectionPanel
+              item={selectedItem}
+              canEdit={canEdit}
+              categories={leafCategories}
+              badgeOptions={state.data.badgeOptions}
+              canMoveUp={selectedSiblingIndex > 0}
+              canMoveDown={selectedSiblingIndex >= 0 && selectedSiblingIndex < selectedSiblingCount - 1}
+              onDraft={updateDraft}
+              onMove={moveItem}
+              onOpen={(menuItemId) => navigate(`/bars/${barId}/menus/${menuItemId}`)}
+            />
+          ) : null}
+        </div>
+        <AdaptiveDialog
+          title="선택 메뉴"
+          open={useSelectionDialog && selectionDialogOpen && explicitlySelectedItem !== null}
+          onClose={() => setSelectionDialogOpen(false)}
+          panelClassName="menu-selection-adaptive-dialog"
+        >
           <MenuSelectionPanel
-            item={selectedItem}
+            item={explicitlySelectedItem}
             canEdit={canEdit}
             categories={leafCategories}
             badgeOptions={state.data.badgeOptions}
@@ -355,10 +388,29 @@ export function MenuItemsPage({ barId, navigate }: { barId: string; navigate: Na
             onMove={moveItem}
             onOpen={(menuItemId) => navigate(`/bars/${barId}/menus/${menuItemId}`)}
           />
-        </div>
+        </AdaptiveDialog>
       </section>
     </div>
   );
+}
+
+function useSelectionDialogMode(): boolean {
+  const [matches, setMatches] = useState(() =>
+    typeof window === "undefined" || typeof window.matchMedia !== "function"
+      ? false
+      : window.matchMedia("(max-width: 1399px)").matches
+  );
+
+  useEffect(() => {
+    if (typeof window.matchMedia !== "function") return undefined;
+    const media = window.matchMedia("(max-width: 1399px)");
+    const update = () => setMatches(media.matches);
+    update();
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, []);
+
+  return matches;
 }
 
 export function MenuItemEditorPage({

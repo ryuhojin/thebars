@@ -48,8 +48,8 @@ export const foundationRoutes: FoundationRoute[] = [
   { path: "/bars/{barId}/settlements", label: "정산 내역", area: "operations", auth: "protected", status: "implemented" },
   { path: "/system/users", label: "사용자 계정", area: "system", auth: "system-admin", status: "implemented" },
   { path: "/system/audit", label: "감사 로그·보관", area: "system", auth: "system-admin", status: "implemented" },
-  { path: "/system/item-types", label: "품목 유형·템플릿", area: "system", auth: "protected", status: "implemented" },
-  { path: "/system/badges", label: "배지·색상", area: "system", auth: "protected", status: "implemented" }
+  { path: "/system/item-types", label: "품목 유형·템플릿", area: "system", auth: "system-admin", status: "implemented" },
+  { path: "/system/badges", label: "배지·색상", area: "system", auth: "system-admin", status: "implemented" }
 ];
 
 export const d00FoundationManifest: FoundationManifest = {

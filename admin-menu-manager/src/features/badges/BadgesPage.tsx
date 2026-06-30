@@ -410,8 +410,9 @@ export function BadgesPage({ navigate }: { navigate: Navigate }) {
           <p>공통 배지, 바 전용 배지, 표시 상태와 색상 대비를 같은 URL에서 관리합니다.</p>
         </div>
         <div className="status-box" role="status">
-          <span>단일 URL</span>
-          <strong>/system/badges</strong>
+          <span>공통 배지</span>
+          <strong>{state.data.systemBadges.length}개</strong>
+          <small>허용 색상 {state.data.colors.length}개</small>
           <button className="button secondary compact" type="button" onClick={refreshAll}>
             새로고침
           </button>

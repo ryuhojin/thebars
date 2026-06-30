@@ -10,6 +10,7 @@ import type {
   OrderTabsResponse
 } from "../../../contracts/orderTabs";
 import { LoadingSkeleton } from "../../components/feedback/LoadingSkeleton";
+import { AdaptiveDialog } from "../../components/adaptive/AdaptiveDialog";
 import { AuthApiError } from "../auth/authApi";
 import { useDirtyWarning } from "../auth/useDirtyWarning";
 import {
@@ -639,7 +640,7 @@ export function OrderTabsPage({
         </div>
       </section>
 
-      <section className="orders-summary-strip orders-kpi-strip" aria-label="테이블 운영 요약">
+      <section className="orders-summary-strip orders-kpi-strip orders-list-summary-strip" aria-label="테이블 운영 요약">
         <div>
           <span>열린 테이블</span>
           <strong>{summary.open}개</strong>
@@ -670,7 +671,7 @@ export function OrderTabsPage({
             <p className="eyebrow">조회 조건</p>
             <h2 id="orders-filter-title">테이블 찾기</h2>
           </div>
-          <a className="button secondary" data-app-link href={`/bars/${barId}/preview`}>
+          <a className="button secondary orders-preview-shortcut" data-app-link href={`/bars/${barId}/preview`}>
             메뉴판 확인
           </a>
         </div>
@@ -1091,6 +1092,8 @@ function DetailPanel({
   onCancel: () => void;
 }) {
   const [addPanelOpen, setAddPanelOpen] = useState(false);
+  const [summaryDialogOpen, setSummaryDialogOpen] = useState(false);
+  const [checkoutReviewOpen, setCheckoutReviewOpen] = useState(false);
 
   if (state === null) {
     return (
@@ -1321,13 +1324,13 @@ function DetailPanel({
             </section>
 
             {(state.data.permissions.canAddCustomOrderItem || state.data.permissions.canApplyOrderAdjustment) ? (
-              <section className="order-extra-actions-panel" aria-labelledby="order-extra-actions-title">
-                <div className="section-heading">
-                  <div>
-                    <p className="eyebrow">직접 입력·조정</p>
-                    <h3 id="order-extra-actions-title">기타 항목·금액 조정</h3>
-                  </div>
-                </div>
+              <details className="order-extra-actions-panel order-extra-inline-disclosure">
+                <summary className="order-extra-inline-summary">
+                  <span>
+                    <strong id="order-extra-actions-title">기타 항목·금액 조정</strong>
+                  </span>
+                </summary>
+                <div className="order-extra-actions-body" aria-labelledby="order-extra-actions-title">
                 {state.data.permissions.canAddCustomOrderItem ? (
                   <div className="order-adjustment-card">
                     <div className="section-heading compact-heading">
@@ -1485,7 +1488,8 @@ function DetailPanel({
                     </div>
                   </div>
                 ) : null}
-              </section>
+                </div>
+              </details>
             ) : null}
           </div>
         ) : null}
@@ -1493,11 +1497,20 @@ function DetailPanel({
 
       <OrderTotalSummaryPanel
         activeItemCount={activeItems.length}
+        currentTotal={currentTotal}
+        currency={state.data.tab.currency}
+        onOpenDetails={() => setSummaryDialogOpen(true)}
+        status={state.data.tab.status}
+      />
+      <OrderItemsBreakdownDialog
+        title="주문 내역"
+        open={summaryDialogOpen}
+        onClose={() => setSummaryDialogOpen(false)}
+        items={activeItems}
+        menuSubtotal={menuSubtotal}
         adjustmentTotal={adjustmentTotal}
         currentTotal={currentTotal}
         currency={state.data.tab.currency}
-        menuSubtotal={menuSubtotal}
-        status={state.data.tab.status}
       />
       </div>
 
@@ -1528,7 +1541,7 @@ function DetailPanel({
               <strong>열린 테이블</strong>
               <span>손님이 계산을 요청하면 테이블을 계산 요청 큐에 올립니다.</span>
             </div>
-            <button className="button primary" type="button" disabled={transitioning === "checkout"} onClick={onRequestCheckout}>
+            <button className="button primary" type="button" disabled={transitioning === "checkout"} onClick={() => setCheckoutReviewOpen(true)}>
               {transitioning === "checkout" ? "요청 중" : "계산 요청"}
             </button>
           </div>
@@ -1622,6 +1635,22 @@ function DetailPanel({
           </div>
         ) : null}
       </section>
+      <OrderItemsBreakdownDialog
+        title="계산 요청 전 주문 확인"
+        open={checkoutReviewOpen}
+        onClose={() => setCheckoutReviewOpen(false)}
+        items={activeItems}
+        menuSubtotal={menuSubtotal}
+        adjustmentTotal={adjustmentTotal}
+        currentTotal={currentTotal}
+        currency={state.data.tab.currency}
+        confirmLabel={transitioning === "checkout" ? "요청 중" : "계산 요청"}
+        confirmDisabled={transitioning === "checkout"}
+        onConfirm={() => {
+          setCheckoutReviewOpen(false);
+          onRequestCheckout();
+        }}
+      />
       </div>
 
       <details className="orders-event-disclosure">
@@ -1645,17 +1674,15 @@ function DetailPanel({
 
 function OrderTotalSummaryPanel({
   activeItemCount,
-  adjustmentTotal,
   currentTotal,
   currency,
-  menuSubtotal,
+  onOpenDetails,
   status
 }: {
   activeItemCount: number;
-  adjustmentTotal: number;
   currentTotal: number;
   currency: string;
-  menuSubtotal: number;
+  onOpenDetails: () => void;
   status: OrderTabStatus;
 }) {
   return (
@@ -1667,23 +1694,118 @@ function OrderTotalSummaryPanel({
         </div>
         <OrderStatusBadge status={status} />
       </div>
-      <div className="settlement-result-grid">
-        <div>
-          <span>메뉴 합계</span>
-          <strong>{formatMoney(menuSubtotal, currency)}</strong>
-        </div>
-        <div>
-          <span>할인·조정</span>
-          <strong>{formatMoney(adjustmentTotal, currency)}</strong>
-        </div>
-      </div>
-      <div className="settlement-final-total">
+      <button className="settlement-final-total order-total-summary-trigger" type="button" onClick={onOpenDetails}>
         <span>현재 합계</span>
         <strong>{formatMoney(currentTotal, currency)}</strong>
-        <small>{activeItemCount}개 진행 중</small>
-      </div>
+        <small>{activeItemCount}개 진행 중 · 상세 보기</small>
+      </button>
       <p className="settlement-guidance">계산 요청과 계좌이체 확인은 결제·정산 탭에서 처리합니다.</p>
     </aside>
+  );
+}
+
+function OrderItemsBreakdownDialog({
+  title,
+  open,
+  onClose,
+  items,
+  menuSubtotal,
+  adjustmentTotal,
+  currentTotal,
+  currency,
+  confirmLabel,
+  confirmDisabled,
+  onConfirm
+}: {
+  title: string;
+  open: boolean;
+  onClose: () => void;
+  items: OrderTabItemDto[];
+  menuSubtotal: number;
+  adjustmentTotal: number;
+  currentTotal: number;
+  currency: string;
+  confirmLabel?: string;
+  confirmDisabled?: boolean;
+  onConfirm?: () => void;
+}) {
+  const menuItems = items.filter((item) => item.type !== "adjustment");
+  const adjustmentItems = items.filter((item) => item.type === "adjustment");
+  return (
+    <AdaptiveDialog title={title} open={open} onClose={onClose} panelClassName="order-breakdown-adaptive-dialog">
+      <div className="order-breakdown-dialog">
+        <div className="order-breakdown-total">
+          <span>현재 합계</span>
+          <strong>{formatMoney(currentTotal, currency)}</strong>
+          <small>메뉴 {formatMoney(menuSubtotal, currency)} · 할인/조정 {formatMoney(adjustmentTotal, currency)}</small>
+        </div>
+
+        <section className="order-breakdown-section" aria-labelledby="order-breakdown-menu-title">
+          <div className="section-heading compact-heading">
+            <div>
+              <p className="eyebrow">주문 항목</p>
+              <h3 id="order-breakdown-menu-title">시킨 메뉴</h3>
+            </div>
+            <strong>{menuItems.length}개</strong>
+          </div>
+          {menuItems.length === 0 ? (
+            <p className="order-breakdown-empty">진행 중인 메뉴 주문이 없습니다.</p>
+          ) : (
+            <div className="order-breakdown-list">
+              {menuItems.map((item) => (
+                <OrderBreakdownLine key={item.id} item={item} />
+              ))}
+            </div>
+          )}
+        </section>
+
+        <section className="order-breakdown-section" aria-labelledby="order-breakdown-adjustment-title">
+          <div className="section-heading compact-heading">
+            <div>
+              <p className="eyebrow">할인·조정</p>
+              <h3 id="order-breakdown-adjustment-title">할인/추가금 내역</h3>
+            </div>
+            <strong>{adjustmentItems.length}개</strong>
+          </div>
+          {adjustmentItems.length === 0 ? (
+            <p className="order-breakdown-empty">적용된 할인이나 추가금이 없습니다.</p>
+          ) : (
+            <div className="order-breakdown-list">
+              {adjustmentItems.map((item) => (
+                <OrderBreakdownLine key={item.id} item={item} />
+              ))}
+            </div>
+          )}
+        </section>
+
+        {confirmLabel && onConfirm ? (
+          <div className="dialog-actions order-breakdown-dialog-actions">
+            <button className="button secondary" type="button" onClick={onClose}>
+              닫기
+            </button>
+            <button className="button primary" type="button" disabled={confirmDisabled} onClick={onConfirm}>
+              {confirmLabel}
+            </button>
+          </div>
+        ) : null}
+      </div>
+    </AdaptiveDialog>
+  );
+}
+
+function OrderBreakdownLine({ item }: { item: OrderTabItemDto }) {
+  return (
+    <div className="order-breakdown-line">
+      <div>
+        <strong>{item.menuItemName}</strong>
+        <small>
+          {lineTypeLabel(item.type)} · {item.priceLabel}
+          {item.volumeText ? ` · ${item.volumeText}` : ""} · {formatMoney(item.unitAmountMinor, item.currency)} × {item.quantity}
+        </small>
+        {item.reason ? <small>사유: {item.reason}</small> : null}
+      </div>
+      <strong>{formatMoney(item.lineTotalAmountMinor, item.currency)}</strong>
+    </div>
   );
 }
 

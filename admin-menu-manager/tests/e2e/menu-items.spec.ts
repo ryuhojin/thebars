@@ -22,6 +22,14 @@ async function createBarThroughUi(page: Page, name: string): Promise<string> {
   return new URL(page.url()).pathname.split("/").at(-1) ?? "";
 }
 
+async function readSelectedBarId(page: Page): Promise<string> {
+  const response = await page.request.get("/api/dashboard");
+  const body = (await response.json()) as { data: { selectedBarId: string | null; accessibleBars: Array<{ id: string; name: string }> } };
+  const bar = body.data.accessibleBars.find((item) => item.id === body.data.selectedBarId) ?? body.data.accessibleBars[0];
+  if (!bar) throw new Error("selected bar fixture missing");
+  return bar.id;
+}
+
 async function createRootCategory(page: Page, name: string) {
   await page.getByRole("button", { name: "상위 추가" }).click();
   await page.getByLabel("카테고리 이름").fill(name);
@@ -130,9 +138,12 @@ async function selectMenuForQuickEdit(page: Page, name: string, width: number) {
   const row = visibleMenuRow(page, name, width);
   if (width < 768) {
     await row.getByRole("button", { name: "선택" }).click();
-    return;
+  } else {
+    await row.click();
   }
-  await row.click();
+  if (width < 1400) {
+    await expect(quickEditPanel(page, width)).toBeVisible();
+  }
 }
 
 async function openMenuEditorFromList(page: Page, name: string, width: number) {
@@ -142,7 +153,19 @@ async function openMenuEditorFromList(page: Page, name: string, width: number) {
     return;
   }
   await row.click();
-  await page.locator(".menu-selection-panel").getByRole("button", { name: "편집 열기" }).click();
+  await quickEditPanel(page, width).getByRole("button", { name: "편집 열기" }).click();
+}
+
+function quickEditPanel(page: Page, width: number) {
+  return width < 1400 ? page.getByRole("dialog", { name: "선택 메뉴" }) : page.locator(".menu-selection-panel");
+}
+
+async function closeQuickEditPanelIfDialog(page: Page, width: number) {
+  if (width >= 1400) return;
+  const dialog = quickEditPanel(page, width);
+  if ((await dialog.count()) === 0) return;
+  await dialog.getByLabel("닫기").click();
+  await expect(dialog).toHaveCount(0);
 }
 
 test("menu category select follows the managed category order", async ({ page }) => {
@@ -164,6 +187,36 @@ test("menu category select follows the managed category order", async ({ page })
   );
 
   expect(optionLabels).toEqual(["Z Order (상위 카테고리)", "Z Order / C Child", "Z Order / B Child", "A Order"]);
+});
+
+test("D12 tablet menu list uses internal grid scroll and quick edit dialog", async ({ page }, testInfo) => {
+  await page.request.post("/__dev/reset-auth?fixtures=full");
+  await page.setViewportSize({ width: 1024, height: 768 });
+  await login(page, "admin1", "AdminPass!1");
+  const barId = await readSelectedBarId(page);
+
+  await page.goto(`/bars/${barId}/menus`);
+  await expect(page.getByRole("heading", { name: "메뉴 관리" })).toBeVisible();
+  await expect(page.locator(".menu-selection-panel")).toHaveCount(0);
+  const gridMetrics = await page.locator(".menus-data-view").evaluate((element) => ({
+    clientWidth: element.clientWidth,
+    overflowX: getComputedStyle(element).overflowX,
+    scrollWidth: element.scrollWidth,
+    pageOverflows: document.documentElement.scrollWidth > document.documentElement.clientWidth
+  }));
+  expect(gridMetrics.overflowX).toBe("auto");
+  expect(gridMetrics.scrollWidth).toBeGreaterThan(gridMetrics.clientWidth);
+  expect(gridMetrics.pageOverflows).toBe(false);
+
+  const firstMenuName = (await page.locator(".menus-table tbody tr").first().locator(".menu-name-cell strong").innerText()).trim();
+  await selectMenuForQuickEdit(page, firstMenuName, 1024);
+  const dialog = quickEditPanel(page, 1024);
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole("heading", { name: firstMenuName })).toBeVisible();
+  await page.screenshot({
+    path: testInfo.outputPath("d12-tablet-dialog-scroll.png"),
+    fullPage: true
+  });
 });
 
 test("bulk final save clears two saved create drafts after menu list reflects them", async ({ page }) => {
@@ -404,7 +457,11 @@ for (const viewport of viewports) {
     await expect(page.getByRole("heading", { name: "메뉴 관리" })).toBeVisible();
     await expect(page.locator(".menu-list-metrics span")).toHaveCount(4);
     await expect(page.locator(".menu-category-rail")).toBeVisible();
-    await expect(page.locator(".menu-selection-panel")).toBeVisible();
+    if (viewport.width >= 1400) {
+      await expect(page.locator(".menu-selection-panel")).toBeVisible();
+    } else {
+      await expect(page.locator(".menu-selection-panel")).toHaveCount(0);
+    }
     await expect(page.locator(".menu-list-inspector")).toHaveCount(0);
     await expect(page.locator(".menu-bulk-panel")).toHaveCount(0);
     await expect(page.getByRole("button", { name: "목록 변경 저장" })).toBeDisabled();
@@ -415,27 +472,33 @@ for (const viewport of viewports) {
       expect(headers).toEqual(["노출순서", "카테고리", "메뉴명", "가격", "배지", "상태", "노출"]);
     }
     await selectMenuForQuickEdit(page, macallanName, viewport.width);
-    await expect(page.locator(".menu-selection-panel").getByRole("heading", { name: macallanName })).toBeVisible();
-    await page.locator(".menu-selection-panel").getByLabel(`${macallanName} 판매 상태 빠른 변경`).selectOption("sold_out");
-    await page.locator(".menu-selection-panel").getByLabel(`${macallanName} 노출 빠른 변경`).uncheck();
-    await page.locator(".menu-selection-panel").getByLabel(`${macallanName} 카테고리 빠른 변경`).selectOption({ label: `칵테일 D12 ${viewport.label}` });
-    await page.locator(".menu-selection-panel").getByLabel(`${macallanName} 배지 추가 선택`).selectOption("system:system-badge-recommended");
-    await page.locator(".menu-selection-panel").getByRole("button", { name: "배지 추가" }).click();
+    const macallanPanel = quickEditPanel(page, viewport.width);
+    await expect(macallanPanel.getByRole("heading", { name: macallanName })).toBeVisible();
+    await macallanPanel.getByLabel(`${macallanName} 판매 상태 빠른 변경`).selectOption("sold_out");
+    await macallanPanel.getByLabel(`${macallanName} 노출 빠른 변경`).uncheck();
+    await macallanPanel.getByLabel(`${macallanName} 카테고리 빠른 변경`).selectOption({ label: `칵테일 D12 ${viewport.label}` });
+    await macallanPanel.getByLabel(`${macallanName} 배지 추가 선택`).selectOption("system:system-badge-recommended");
+    await macallanPanel.getByRole("button", { name: "배지 추가" }).click();
+    await closeQuickEditPanelIfDialog(page, viewport.width);
     await selectMenuForQuickEdit(page, negroniName, viewport.width);
-    await expect(page.locator(".menu-selection-panel").getByRole("heading", { name: negroniName })).toBeVisible();
-    await page.locator(".menu-selection-panel").getByLabel(`${negroniName} 판매 상태 빠른 변경`).selectOption("sold_out");
-    await page.locator(".menu-selection-panel").getByLabel(`${negroniName} 노출 빠른 변경`).uncheck();
-    await page.locator(".menu-selection-panel").getByLabel(`${negroniName} 배지 추가 선택`).selectOption("system:system-badge-recommended");
-    await page.locator(".menu-selection-panel").getByRole("button", { name: "배지 추가" }).click();
+    const negroniPanel = quickEditPanel(page, viewport.width);
+    await expect(negroniPanel.getByRole("heading", { name: negroniName })).toBeVisible();
+    await negroniPanel.getByLabel(`${negroniName} 판매 상태 빠른 변경`).selectOption("sold_out");
+    await negroniPanel.getByLabel(`${negroniName} 노출 빠른 변경`).uncheck();
+    await negroniPanel.getByLabel(`${negroniName} 배지 추가 선택`).selectOption("system:system-badge-recommended");
+    await negroniPanel.getByRole("button", { name: "배지 추가" }).click();
+    await closeQuickEditPanelIfDialog(page, viewport.width);
     await expect(page.locator(".menus-toolbar .status-badge").filter({ hasText: "미저장 2개" })).toBeVisible();
     await expect(page.getByRole("button", { name: "목록 변경 저장" })).toBeEnabled();
 
     await page.setViewportSize({ width: 390, height: 844 });
     await expect(page).toHaveURL(new RegExp(`/bars/${barId}/menus$`));
     await selectMenuForQuickEdit(page, macallanName, 390);
-    await expect(page.locator(".menu-selection-panel").getByLabel(`${macallanName} 판매 상태 빠른 변경`)).toHaveValue("sold_out");
-    await expect(page.locator(".menu-selection-panel").getByLabel(`${macallanName} 노출 빠른 변경`)).not.toBeChecked();
+    const compactPanel = quickEditPanel(page, 390);
+    await expect(compactPanel.getByLabel(`${macallanName} 판매 상태 빠른 변경`)).toHaveValue("sold_out");
+    await expect(compactPanel.getByLabel(`${macallanName} 노출 빠른 변경`)).not.toBeChecked();
     await expect(page.locator(".menus-toolbar .status-badge").filter({ hasText: "미저장 2개" })).toBeVisible();
+    await closeQuickEditPanelIfDialog(page, 390);
     await page.screenshot({
       path: testInfo.outputPath(`d12-bulk-draft-${viewport.label}.png`),
       fullPage: true

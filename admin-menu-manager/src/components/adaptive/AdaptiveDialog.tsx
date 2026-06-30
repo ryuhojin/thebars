@@ -5,9 +5,10 @@ type AdaptiveDialogProps = {
   open: boolean;
   children: ReactNode;
   onClose: () => void;
+  panelClassName?: string;
 };
 
-export function AdaptiveDialog({ title, open, children, onClose }: AdaptiveDialogProps) {
+export function AdaptiveDialog({ title, open, children, onClose, panelClassName }: AdaptiveDialogProps) {
   const dialogRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
@@ -50,7 +51,7 @@ export function AdaptiveDialog({ title, open, children, onClose }: AdaptiveDialo
     <div className="dialog-backdrop" role="presentation">
       <section
         ref={dialogRef}
-        className="adaptive-dialog"
+        className={panelClassName ? `adaptive-dialog ${panelClassName}` : "adaptive-dialog"}
         role="dialog"
         aria-modal="true"
         aria-labelledby="adaptive-dialog-title"
